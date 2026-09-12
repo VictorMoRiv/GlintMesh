@@ -77,8 +77,8 @@ const I18N = {
 };
 let lang = localStorage.getItem('glintmesh-lang') || 'es';
 if (!I18N[lang]) lang = 'es';
-Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', signin: 'Entrar', signup: 'Registro', signin_title: 'Iniciar sesión', voice_on: 'Escuchando... habla ahora', voice_off: 'Voz no disponible en este navegador', voice_mic_denied: 'Permite el micrófono en el navegador y reintenta', voice_no_mic: 'No se encontró micrófono', voice_no_speech: 'No te escuché, habla más fuerte y reintenta', voice_network: 'Voz necesita internet (Chrome/Edge)', voice_lang: 'Idioma de voz no soportado', img_many: 'Máximo 3 imágenes', img_big: 'Imagen muy pesada (máx 1.5 MB)' });
-Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', signin: 'Sign in', signup: 'Register', signin_title: 'Sign in', voice_on: 'Listening... speak now', voice_off: 'Voice not available in this browser', voice_mic_denied: 'Allow the microphone in the browser and retry', voice_no_mic: 'No microphone found', voice_no_speech: 'Did not hear you, speak up and retry', voice_network: 'Voice needs internet (Chrome/Edge)', voice_lang: 'Voice language not supported', img_many: 'Max 3 images', img_big: 'Image too large (max 1.5 MB)' });
+Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', signin: 'Entrar', signup: 'Registro', signin_title: 'Iniciar sesión', session_saved: 'Sesión guardada mientras hay login', guest_note: 'Modo invitado: tu info se pierde al salir del chat. Inicia sesión para guardarla.', voice_on: 'Escuchando... habla ahora', voice_off: 'Voz no disponible en este navegador', voice_mic_denied: 'Permite el micrófono en el navegador y reintenta', voice_no_mic: 'No se encontró micrófono', voice_no_speech: 'No te escuché, habla más fuerte y reintenta', voice_network: 'Voz necesita internet (Chrome/Edge)', voice_lang: 'Idioma de voz no soportado', img_many: 'Máximo 3 imágenes', img_big: 'Imagen muy pesada (máx 1.5 MB)' });
+Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', signin: 'Sign in', signup: 'Register', signin_title: 'Sign in', session_saved: 'Session saved while signed in', guest_note: 'Guest mode: your info is lost when you leave the chat. Sign in to keep it.', voice_on: 'Listening... speak now', voice_off: 'Voice not available in this browser', voice_mic_denied: 'Allow the microphone in the browser and retry', voice_no_mic: 'No microphone found', voice_no_speech: 'Did not hear you, speak up and retry', voice_network: 'Voice needs internet (Chrome/Edge)', voice_lang: 'Voice language not supported', img_many: 'Max 3 images', img_big: 'Image too large (max 1.5 MB)' });
 const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k;
 
 function applyLang(next) {
@@ -150,7 +150,7 @@ $('btn-clear').addEventListener('click', () => {
   const autoBox = $('auto-refresh');
   if (autoBox) autoBox.checked = false;
   activeDataset = null; refreshDatasetChip();
-  try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  try { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
   welcomeState.style.display = 'flex'; generatedWrapper.classList.remove('visible');
   agentBubble.style.display = 'none'; previewContainer.style.display = 'none'; agentBubbleText.textContent = '';
   $('user-bubble').style.display = 'none'; $('user-bubble-text').textContent = ''; $('user-bubble-imgs').innerHTML = '';
@@ -304,7 +304,7 @@ $('btn-style-reset').addEventListener('click', () => {
 });
 function refreshSettingsSession() {
   let session = null;
-  try { session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
+  try { session = JSON.parse(localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
   const el = $('settings-session');
   if (session && (session.generatedHTML || session.agentMessage)) {
     const imp = getImportant();
@@ -318,7 +318,7 @@ function refreshSettingsSession() {
     });
     el.querySelector('#btn-wipe-session').textContent = t('delete');
     el.querySelector('#btn-wipe-session').addEventListener('click', () => {
-      try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+      try { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
       refreshSettingsSession();
     });
   } else {
@@ -360,7 +360,7 @@ $('btn-wipe-all').addEventListener('click', async () => {
     const res = await fetch('/api/datasets');
     nDatasets = ((await res.json()).datasets || []).length;
   } catch (e) {}
-  try { hasSession = !!JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
+  try { hasSession = !!JSON.parse(localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
   const imp = getImportant();
   const parts = [];
   if (hasSession) parts.push('1 ' + t('w_session') + (imp.session ? ' (' + t('imp_tag') + ')' : ''));
@@ -384,7 +384,7 @@ async function wipeAll(keepImportant) {
     }
   } catch (e) {}
   if (!keepImportant || !imp.session) {
-    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    try { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
   }
   if (!keepImportant) {
     try { localStorage.removeItem(STYLE_KEY); localStorage.removeItem(UI_KEY); localStorage.removeItem(IMPORTANT_KEY); } catch (e) {}
@@ -936,19 +936,25 @@ function finalize(fullText) {
   saveSession();
 }
 
+function isAuthed() {
+  try { return !!(JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}).token; } catch (e) { return false; }
+}
+
 function saveSession() {
   try {
     if (!state.generatedHTML && !state.agentMessage) return;
-    localStorage.setItem(SESSION_KEY, JSON.stringify({
+    const data = JSON.stringify({
       lang, agentMessage: agentBubbleText.textContent || '', generatedHTML: state.generatedHTML || '',
       dataset: activeDataset, ts: Date.now(),
-    }));
+    });
+    if (isAuthed()) localStorage.setItem(SESSION_KEY, data);
+    else sessionStorage.setItem(SESSION_KEY, data);
   } catch (e) {}
 }
 
 function restoreSession() {
   let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
+  try { saved = JSON.parse(localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
   if (!saved || (!saved.generatedHTML && !saved.agentMessage)) return;
   if (saved.lang && I18N[saved.lang]) applyLang(saved.lang);
   welcomeState.style.display = 'none';
@@ -1093,11 +1099,29 @@ function authHeaders() {
   } catch (e) {}
   return {};
 }
+function currentAuth() {
+  try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}; } catch (e) { return {}; }
+}
 function refreshAuthLabel() {
-  let user = null;
-  try { user = (JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}).user || null; } catch (e) {}
+  const s = currentAuth();
+  const user = s.user || null, avatar = s.avatar || null;
   $('auth-label').textContent = user || t('signin');
+  $('auth-avatar').style.display = avatar ? 'inline-block' : 'none';
+  $('auth-icon').style.display = avatar ? 'none' : '';
+  if (avatar) $('auth-avatar-img').src = avatar;
   $('btn-logout').style.display = user ? 'block' : 'none';
+  $('auth-profile').style.display = user ? 'flex' : 'none';
+  $('auth-guest-note').style.display = user ? 'none' : 'block';
+  $('auth-user').style.display = user ? 'none' : 'block';
+  $('auth-pass').style.display = user ? 'none' : 'block';
+  $('btn-login').style.display = user ? 'none' : 'block';
+  $('btn-register').style.display = user ? 'none' : 'block';
+  if (user) {
+    $('auth-profile-name').textContent = user;
+    $('auth-profile-img').style.display = avatar ? 'block' : 'none';
+    $('auth-profile-icon').style.display = avatar ? 'none' : 'block';
+    if (avatar) $('auth-profile-img').src = avatar;
+  }
 }
 $('btn-auth').addEventListener('click', () => { refreshAuthLabel(); $('auth-modal').style.display = 'block'; $('auth-overlay').style.display = 'block'; });
 $('btn-close-auth').addEventListener('click', () => { $('auth-modal').style.display = 'none'; $('auth-overlay').style.display = 'none'; });
@@ -1122,8 +1146,35 @@ $('btn-logout').addEventListener('click', async () => {
     const s = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
     if (s && s.token) await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: s.token }) });
   } catch (e) {}
-  try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
+  try { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
   refreshAuthLabel();
+});
+// Guest mode: info lives only in this tab; never persist guests to disk.
+window.addEventListener('beforeunload', () => {
+  if (!isAuthed()) { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
+});
+// ─── Avatar: foto de perfil (max ~300 KB) ──────────────────────────────────
+$('btn-avatar-pick').addEventListener('click', () => $('auth-avatar-input').click());
+$('auth-avatar-input').addEventListener('change', (e) => {
+  const f = (e.target.files || [])[0];
+  e.target.value = '';
+  if (!f) return;
+  if (f.size > 300000) { $('auth-note').textContent = 'photo too large (max 300 KB)'; return; }
+  const rd = new FileReader();
+  rd.onload = async () => {
+    const url = String(rd.result || '');
+    if (!/^data:image\/(png|jpeg|webp|gif);base64,/.test(url)) return;
+    try {
+      const res = await fetch('/api/auth/avatar', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ avatar: url.slice(0, 400000) }) });
+      if (!res.ok) throw new Error('upload failed');
+      const data = await res.json();
+      const s = currentAuth(); s.avatar = data.avatar;
+      try { localStorage.setItem(AUTH_KEY, JSON.stringify(s)); } catch (err) {}
+      refreshAuthLabel();
+      showToast(data.user, 'success');
+    } catch (err) { $('auth-note').textContent = 'photo upload failed'; }
+  };
+  rd.readAsDataURL(f);
 });
 refreshAuthLabel();
 // ─── 3. Retry 1-clic ────────────────────────────────────────────────────────

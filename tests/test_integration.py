@@ -385,6 +385,8 @@ class ImagePromptTests(unittest.TestCase):
         parts = fake.calls[0]["contents"][0].parts
         self.assertTrue(parts[0].text.startswith("Describe"))
         self.assertIn("Analyze them visually", parts[0].text)
+        self.assertIn("IMAGE RULES", parts[0].text)
+        self.assertIn("meme", parts[0].text)
         self.assertTrue(any(getattr(p, "inline_data", None) is not None for p in parts[1:]))
 
 
@@ -402,11 +404,25 @@ class AuthTests(unittest.TestCase):
         login = self.client.post("/api/auth/login", json={"user": "jack", "password": "secret1"}).json()
         self.assertIn("token", login)
         me = self.client.get("/api/auth/me", headers={"Authorization": "Bearer " + login["token"]}).json()
-        self.assertEqual(me, {"user": "jack"})
+        self.assertEqual(me["user"], "jack")
         self.assertEqual(self.client.get("/api/auth/me").json(), {"user": None})
         self.assertEqual(self.client.post("/api/auth/login", json={"user": "jack", "password": "nope"}).status_code, 401)
         self.assertEqual(self.client.post("/api/auth/logout", json={"token": login["token"]}).status_code, 200)
         self.assertEqual(self.client.get("/api/auth/me", headers={"Authorization": "Bearer " + login["token"]}).json(), {"user": None})
+
+    def test_avatar_roundtrip_and_validation(self):
+        self.client.post("/api/auth/register", json={"user": "ana", "password": "secret2"})
+        login = self.client.post("/api/auth/login", json={"user": "ana", "password": "secret2"}).json()
+        headers = {"Authorization": "Bearer " + login["token"]}
+        import base64
+        tiny = "data:image/png;base64," + base64.b64encode(b"avatarbytes" * 20).decode()
+        updated = self.client.put("/api/auth/avatar", json={"avatar": tiny}, headers=headers).json()
+        self.assertEqual(updated["user"], "ana")
+        self.assertTrue(updated["avatar"].startswith("data:image/png;base64,"))
+        me = self.client.get("/api/auth/me", headers=headers).json()
+        self.assertEqual(me["avatar"], tiny)
+        self.assertEqual(self.client.put("/api/auth/avatar", json={"avatar": tiny}).status_code, 401)
+        self.assertEqual(self.client.put("/api/auth/avatar", json={"avatar": "not-a-data-url"}, headers=headers).status_code, 422)
 
     def test_passwords_are_hashed(self):
         self.client.post("/api/auth/register", json={"user": "ana", "password": "secret2"})

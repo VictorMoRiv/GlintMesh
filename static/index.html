@@ -304,7 +304,8 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         <span id="settings-dot" style="display:none; position:absolute; top:4px; right:4px; width:7px; height:7px; border-radius:50%; background:#34d399;"></span>
       </button>
       <button class="btn-glass" id="btn-auth" title="Sign in">
-        <i class="bi bi-person-circle"></i>
+        <span id="auth-avatar" style="display:none; width:22px; height:22px; border-radius:50%; overflow:hidden; flex-shrink:0;"><img id="auth-avatar-img" style="width:100%; height:100%; object-fit:cover;" /></span>
+        <i class="bi bi-person-circle" id="auth-icon"></i>
         <span id="auth-label" data-i18n="signin">Sign in</span>
       </button>
       <button class="btn-glass" id="btn-clear" title="Clear current session">
@@ -461,7 +462,7 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         <div id="img-strip" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:12px; padding:8px;"></div>
         <div id="input-wrapper">
           <button id="mic-btn" type="button" title="Voice input" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-mic"></i></button>
-          <button id="img-btn" type="button" title="Attach images" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-image"></i></button>
+          <button id="img-btn" type="button" title="Attach chart images (financial charts only)" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-image"></i></button>
           <textarea id="chat-textarea" rows="1" maxlength="500" data-i18n-ph="placeholder" placeholder="Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'"></textarea>
           <button id="send-btn" title="Generate interface"><i class="bi bi-arrow-up"></i></button>
         </div>
@@ -595,8 +596,21 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
     <button class="btn-glass" id="btn-close-auth" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
   </div>
   <div style="display:flex; flex-direction:column; gap:8px;">
+    <div id="auth-profile" style="display:none; align-items:center; gap:12px; background:rgba(52,211,153,0.07); border:1px solid rgba(52,211,153,0.3); border-radius:10px; padding:10px 12px;">
+      <span style="position:relative; width:48px; height:48px; border-radius:50%; overflow:hidden; background:rgba(255,255,255,0.06); flex-shrink:0; display:flex; align-items:center; justify-content:center;">
+        <img id="auth-profile-img" style="display:none; width:100%; height:100%; object-fit:cover;" />
+        <i class="bi bi-person-fill" id="auth-profile-icon" style="font-size:22px; color:var(--text-secondary);"></i>
+      </span>
+      <div style="flex:1; min-width:0;">
+        <div id="auth-profile-name" style="font-size:14px; font-weight:700; overflow:hidden; text-overflow:ellipsis;"></div>
+        <div style="font-size:11px; color:var(--text-secondary);" data-i18n="session_saved">Session saved while signed in</div>
+      </div>
+      <button class="btn-glass btn-sm" id="btn-avatar-pick" type="button"><i class="bi bi-camera"></i></button>
+    </div>
+    <div id="auth-guest-note" style="font-size:11px; color:var(--accent-amber);" data-i18n="guest_note">Guest mode: your info is lost when you leave the chat. Sign in to keep it.</div>
     <input id="auth-user" maxlength="30" placeholder="user" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
     <input id="auth-pass" type="password" maxlength="100" placeholder="password" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+    <input type="file" id="auth-avatar-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" />
     <div id="auth-note" style="font-size:11px; color:var(--text-muted);">Local account. Optional for demo.</div>
     <div style="display:flex; gap:8px;">
       <button class="btn-glass" id="btn-login" style="flex:1; border-color:rgba(52,211,153,0.4); color:#34d399;"><span data-i18n="signin">Sign in</span></button>

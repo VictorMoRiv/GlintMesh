@@ -324,7 +324,12 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
         except Exception:
             continue
     if n_images:
-        first_parts[0] = types.Part(text=user_message + f"\n[User attached {n_images} image(s). Analyze them visually FIRST and reference what you see before building anything.]")
+        first_parts[0] = types.Part(text=user_message + (
+            f"\n[User attached {n_images} image(s). IMAGE RULES: accept ONLY financial charts, graphs, "
+            "tables or dashboards. Analyze them visually FIRST and reference what you see. "
+            "If an image is NOT a financial graphic (meme, animal, person, landscape, random photo), "
+            "do NOT break and do NOT output any HTML block: reply in 1-2 sentences explaining you can "
+            "only build interfaces from financial charts/graphics, and ask for a proper one.]"))
         yield event("status", content=f"Analyzing {n_images} image(s)...")
     contents = [types.Content(role="user", parts=first_parts)]
     if context:
@@ -486,18 +491,51 @@ async def auth_login(body: AuthBody):
     token = uuid.uuid4().hex + uuid.uuid4().hex
     record.setdefault("sessions", []).append(token)
     _save_users(users)
-    return {"user": record["user"], "token": token}
+    return {"user": record["user"], "token": token, "avatar": record.get("avatar")}
+
+
+class AvatarBody(BaseModel):
+    avatar: str = Field(min_length=100, max_length=400000)
+
+    @field_validator("avatar", mode="before")
+    @classmethod
+    def check_avatar(cls, value):
+        if isinstance(value, str) and re.fullmatch(
+                r"data:image/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+", value.strip()):
+            return value.strip()
+        raise ValueError("Invalid avatar")
+
+
+def _auth_record(request: Request) -> dict | None:
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.lower().startswith("bearer ") else ""
+    if not token:
+        return None
+    for record in _load_users().values():
+        if token in record.get("sessions", []):
+            return record
+    return None
 
 
 @app.get("/api/auth/me")
 async def auth_me(request: Request):
+    record = _auth_record(request)
+    if record:
+        return {"user": record["user"], "avatar": record.get("avatar")}
+    return {"user": None}
+
+
+@app.put("/api/auth/avatar")
+async def auth_avatar(body: AvatarBody, request: Request):
+    users = _load_users()
     auth = request.headers.get("authorization", "")
     token = auth[7:] if auth.lower().startswith("bearer ") else ""
-    users = _load_users()
-    for record in users.values():
+    for key, record in users.items():
         if token and token in record.get("sessions", []):
-            return {"user": record["user"]}
-    return {"user": None}
+            record["avatar"] = body.avatar[:400000]
+            _save_users(users)
+            return {"user": record["user"], "avatar": record["avatar"]}
+    raise HTTPException(status_code=401, detail="Not signed in.")
 
 
 @app.post("/api/auth/logout")

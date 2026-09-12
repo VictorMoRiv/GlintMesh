@@ -61,8 +61,8 @@ Con MCP activado, el backend obtiene los esquemas, entrega las herramientas a Ge
 - `DELETE /api/datasets/{id}`: borra un dataset.
 - `POST /api/tool-call`: re-ejecuta un MCP sin Gemini (refresh gratis de superficies A2UI).
 - `POST /api/share` + `GET /share/{id}`: link compartible de una interfaz generada.
-- `POST /api/generate`: JSON `{"message":"...", "lang":"es"|"en", "context":"resumen opcional", "dataset_id":"opcional", "images":[{"mime":"image/png","data":"base64"}]}`; `message` 1-500 chars, `context` hasta 2000, máx 3 imágenes (cada una 1.5 MB, png/jpeg/webp/gif) que llegan a Gemini como `inline_data`. Respuesta SSE con eventos `status`, `text_chunk`, `tool_call`, `tool_result`, `error` y `done`. La UI guarda la última sesión en localStorage y reenvía su resumen como `context` para continuidad.
-- `POST /api/auth/register` + `POST /api/auth/login` + `GET /api/auth/me` (Bearer) + `POST /api/auth/logout`: cuentas locales en `users.json` (hash sha256+salt, gitignored). Login opcional para demo; la UI muestra el usuario y manda el token si existe.
+- `POST /api/generate`: JSON `{"message":"...", "lang":"es"|"en", "context":"resumen opcional", "dataset_id":"opcional", "images":[{"mime":"image/png","data":"base64"}]}`; `message` 1-500 chars, `context` hasta 2000, máx 3 imágenes (cada una 1.5 MB, png/jpeg/webp/gif) que llegan a Gemini como `inline_data`. Regla: solo gráficas financieras (charts, tablas, dashboards); si mandas un meme/perro/foto random no se rompe — responde en 1-2 frases que solo trabaja con gráficas y no genera HTML.
+- `POST /api/auth/register` + `POST /api/auth/login` + `GET /api/auth/me` (Bearer, devuelve `user` y `avatar`) + `PUT /api/auth/avatar` (data URL png/jpeg/webp/gif, máx ~300 KB) + `POST /api/auth/logout`: cuentas locales en `users.json` (hash sha256+salt, gitignored). Invitado: tu sesión vive solo en la pestaña y se pierde al salir; con login se guarda en el navegador.
 - `GET /api/tools`: herramientas disponibles; lista vacía cuando MCP está desactivado.
 - `GET /health`: modelo y presencia de configuración, sin exponer la clave. No realiza una llamada de validación a Gemini.
 
@@ -70,9 +70,9 @@ Los errores de validación usan HTTP 422; una clave sin configurar usa HTTP 503.
 
 ## Demo 3 minutos (ver DEMO-3MIN.md)
 
-1. `Hola` → respuesta de texto (0:30). Micrófono para dictar (Web Speech API, Chrome/Edge) y clip para adjuntar hasta 3 imágenes que ve Gemini.
+1. `Hola` → respuesta de texto (0:30). Micrófono para dictar (Web Speech API, Chrome/Edge) y clip para adjuntar hasta 3 gráficas que ve Gemini (memes/perros se rechazan con mensaje, sin romperse).
 2. `Dashboard de portafolio AAPL, MSFT, NVDA` → Preview + A2UI + **Compose dashboard** combina N superficies en 1 (1:30).
-3. **Refresh data** sin cuota + **Retry** en 1 clic si falla Gemini + **Sign in** local (1:00).
+3. **Refresh data** sin cuota + **Retry** en 1 clic si falla Gemini + **Sign in** con foto (invitado pierde todo al salir, logueado lo guarda) (1:00).
 
 Compatibilidad: voz e imágenes con degradado — si el navegador no soporta dictado, el botón avisa; sin login todo sigue funcionando (demo-friendly).
 
