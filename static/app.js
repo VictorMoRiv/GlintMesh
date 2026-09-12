@@ -21,7 +21,7 @@ const I18N = {
     uploaded_ok: 'Dataset cargado', upload_fail: 'No se pudo cargar el dataset', rows: 'filas',
     settings: 'Configuración', style_title: 'Estilo de interfaces', style_sub: 'Describe cómo quieres que se vean todas tus interfaces. Vacío = minimalista empresarial (default).',
     style_ph: 'Ej.: modo oscuro con acentos verdes y números grandes...', save: 'Guardar', reset_default: 'Restablecer',
-    s_min: 'Minimalista empresarial', s_glass: 'Glassmorphism', s_dark: 'Oscuro simple', s_corp: 'Corporativo clásico', style_saved: 'Estilo guardado',
+    s_min: 'Minimalista empresarial', s_glass: 'Glassmorphism', s_dark: 'Oscuro simple', s_corp: 'Corporativo clásico', s_custom: 'Personalizado', style_saved: 'Estilo guardado',
     model_label: 'Modelo', creativity: 'Creatividad', mode_label: 'Modo', mode_full: 'Interfaz completa', mode_data: 'Solo datos',
     data_mgmt: 'Datos guardados', saved_session: 'Sesión guardada', session_empty: 'Sin sesión guardada', delete: 'Borrar',
     session_cleared: 'Sesión limpiada', no_export: 'Aún no hay interfaz para exportar', exported: 'Interfaz exportada',
@@ -48,7 +48,7 @@ const I18N = {
     uploaded_ok: 'Dataset uploaded', upload_fail: 'Could not upload dataset', rows: 'rows',
     settings: 'Settings', style_title: 'Interface style', style_sub: 'Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).',
     style_ph: 'E.g.: dark mode with green accents and big numbers...', save: 'Save', reset_default: 'Reset',
-    s_min: 'Minimalist enterprise', s_glass: 'Glassmorphism', s_dark: 'Simple dark', s_corp: 'Classic corporate', style_saved: 'Style saved',
+    s_min: 'Minimalist enterprise', s_glass: 'Glassmorphism', s_dark: 'Simple dark', s_corp: 'Classic corporate', s_custom: 'Custom', style_saved: 'Style saved',
     model_label: 'Model', creativity: 'Creativity', mode_label: 'Mode', mode_full: 'Full interface', mode_data: 'Data only',
     data_mgmt: 'Saved data', saved_session: 'Saved session', session_empty: 'No saved session', delete: 'Delete',
     session_cleared: 'Session cleared', no_export: 'No interface to export yet', exported: 'Interface exported',
@@ -191,10 +191,11 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&a
 // ─── Generation settings (interface style prompt) ───────────────────────────
 const STYLE_KEY = 'glintmesh-style-v1';
 const STYLE_PRESETS = {
-  minimalist: '',
-  glass: 'Glassmorphism style: frosted-glass cards with blur over a deep blue-purple gradient background, soft glows, cyan accents, modern and striking while keeping numbers readable.',
+  minimalist: 'Minimalist enterprise style: clean layouts with generous whitespace, slate grays with one emerald accent, simple bordered cards, professional typography, clear data tables, no gradients or decoration.',
+  glass: 'True glassmorphism style: transparent frosted-crystal cards with backdrop blur you can see through, thin translucent white borders, subtle light refraction and soft shadows, airy and clean.',
   dark: 'Simple dark style: flat near-black background, light gray text, one subtle accent color, minimal borders, maximum readability, no gradients or effects.',
   corporate: 'Classic corporate banking style: white background, navy blue headers, conservative tables, dense and formal, maximum readability.',
+  custom: '',
 };
 let stylePrompt = '', stylePreset = 'minimalist';
 let genModel = '', genTemp = 0.7, genMode = 'full';
@@ -210,15 +211,14 @@ function persistSettings() {
   try { localStorage.setItem(STYLE_KEY, JSON.stringify({ prompt: stylePrompt, preset: stylePreset, model: genModel, temp: genTemp, mode: genMode })); } catch (e) {}
 }
 function refreshSettingsDot() {
-  $('settings-dot').style.display = (stylePrompt || genModel || genMode === 'data' || genTemp !== 0.7) ? 'block' : 'none';
+  $('settings-dot').style.display = (stylePrompt && stylePreset !== 'minimalist') ? 'block' : 'none';
 }
 function syncSettingsUI() {
   const ta = $('style-textarea');
   ta.value = stylePrompt;
   $('style-count').textContent = ta.value.length + ' / 1000';
   document.querySelectorAll('#style-presets [data-preset]').forEach((b) => {
-    const on = b.dataset.preset === stylePreset && (b.dataset.preset === 'minimalist' ? !stylePrompt : true);
-    b.style.borderColor = on ? 'rgba(52,211,153,0.5)' : '';
+    b.style.borderColor = b.dataset.preset === stylePreset ? 'rgba(52,211,153,0.5)' : '';
   });
   const sel = $('gen-model');
   sel.innerHTML = '<option value="">default</option>' + (cachedHealth && cachedHealth.models ? cachedHealth.models.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') : '');
@@ -243,8 +243,9 @@ $('btn-close-settings').addEventListener('click', closeSettings);
 $('settings-overlay').addEventListener('click', closeSettings);
 document.querySelectorAll('#style-presets [data-preset]').forEach((b) => b.addEventListener('click', () => {
   stylePreset = b.dataset.preset;
-  $('style-textarea').value = STYLE_PRESETS[stylePreset];
+  $('style-textarea').value = stylePreset === 'custom' ? '' : STYLE_PRESETS[stylePreset];
   $('style-count').textContent = $('style-textarea').value.length + ' / 1000';
+  if (stylePreset === 'custom') $('style-textarea').focus();
   openSettingsRefresh();
 }));
 function openSettingsRefresh() {
