@@ -150,6 +150,18 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn("Dark neon style", config.system_instruction)
         self.assertEqual(self.client.post("/api/generate", json={"message": "Hi", "style_prompt": "x" * 1001}).status_code, 422)
 
+    def test_generation_options_validated_and_forwarded(self):
+        fake = FakeClient([[response(types.Part(text="ok"))]])
+        with patch.object(main, "GEMINI_MODELS", ["model-a", "model-b"]), patch.object(main.genai, "Client", return_value=fake):
+            result = self.client.post("/api/generate", json={"message": "Hi", "model": "model-b", "temperature": 0.2, "mode": "data"})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(fake.calls[0]["model"], "model-b")
+        self.assertEqual(fake.calls[0]["config"].temperature, 0.2)
+        self.assertIn("Data-only mode", fake.calls[0]["config"].system_instruction)
+        for bad in ({"model": "nope"}, {"temperature": 2}, {"temperature": -1}, {"mode": "turbo"}):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.client.post("/api/generate", json={"message": "Hi", **bad}).status_code, 422)
+
     def test_mcp_failure_is_explicit(self):
         with patch.object(main, "MCP_ENABLED", True), patch.object(main.mcp_client, "list_tools", new_callable=AsyncMock, side_effect=RuntimeError("secret")):
             events = self.generate(FakeClient([]))
@@ -316,6 +328,12 @@ class DatasetTests(unittest.TestCase):
     def test_generate_unknown_dataset_is_404(self):
         result = self.client.post("/api/generate", json={"message": "Hi", "dataset_id": "nope_nope"})
         self.assertEqual(result.status_code, 404)
+
+    def test_delete_dataset(self):
+        data = self.upload("test_gone.csv", "a\n1\n").json()
+        self.assertEqual(self.client.delete(f"/api/datasets/{data['id']}").status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/datasets/{data['id']}").status_code, 404)
+        self.assertEqual(self.client.delete("/api/datasets/../main").status_code, 404)
 
 
 if __name__ == "__main__":

@@ -53,6 +53,9 @@ class GenerateRequest(BaseModel):
     context: str | None = Field(default=None, max_length=2000)
     dataset_id: str | None = Field(default=None, max_length=60)
     style_prompt: str | None = Field(default=None, max_length=1000)
+    model: str | None = Field(default=None, max_length=80)
+    temperature: float | None = Field(default=None, ge=0.0, le=1.0)
+    mode: str = Field(default="full", pattern="^(full|data)$")
 
     @field_validator("message", mode="before")
     @classmethod
@@ -74,6 +77,15 @@ class GenerateRequest(BaseModel):
             value = value.strip()
             return value or None
         return value
+
+    @field_validator("model", mode="before")
+    @classmethod
+    def check_model(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip() in GEMINI_MODELS:
+            return value.strip()
+        raise ValueError("Unknown model")
 
 
 def event(kind: str, **payload) -> str:
@@ -277,7 +289,9 @@ def gemini_error_message(error):
 
 
 async def run_agent_stream(user_message: str, lang: str = "es", context: str | None = None,
-                     dataset_text: str | None = None, style_prompt: str | None = None) -> AsyncIterator[str]:
+                     dataset_text: str | None = None, style_prompt: str | None = None,
+                     model_choice: str | None = None, temperature: float | None = None,
+                     mode: str = "full") -> AsyncIterator[str]:
     yield event("status", content="Connecting to Gemini...")
     mcp_tools = []
     if MCP_ENABLED:
@@ -299,15 +313,20 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
     if style_prompt:
         system_instruction += ("\nUser style preference for all generated interfaces "
                                "(takes precedence over the default visual style): " + style_prompt[:800])
+    if mode == "data":
+        system_instruction += ("\nData-only mode: call the needed MCP tools, then reply with a 1-2 sentence "
+                               "summary only. Do NOT output any HTML block.")
     config = types.GenerateContentConfig(
         system_instruction=system_instruction,
         tools=build_gemini_tools(mcp_tools) or None,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-        temperature=0.7,
+        temperature=0.7 if temperature is None else temperature,
     )
     allowed_tools = {tool.name for tool in mcp_tools}
     initial_contents = list(contents)
-    combos = [(key, model) for key in (GEMINI_API_KEYS or [GEMINI_API_KEY]) for model in GEMINI_MODELS]
+    preferred = [model_choice] if model_choice else []
+    ordered_models = preferred + [m for m in GEMINI_MODELS if m != model_choice]
+    combos = [(key, model) for key in (GEMINI_API_KEYS or [GEMINI_API_KEY]) for model in ordered_models]
     for combo_index, (api_key, model) in enumerate(combos):
         last_combo = combo_index == len(combos) - 1
         contents = list(initial_contents)
@@ -383,7 +402,9 @@ async def generate_interface(body: GenerateRequest):
     if not GEMINI_API_KEYS:
         raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY in the server .env file before generating.")
     dataset_text = load_dataset_context(body.dataset_id) if body.dataset_id else None
-    return StreamingResponse(run_agent_stream(body.message, body.lang, body.context, dataset_text, body.style_prompt), media_type="text/event-stream", headers={
+    return StreamingResponse(run_agent_stream(body.message, body.lang, body.context, dataset_text,
+                                              body.style_prompt, body.model, body.temperature, body.mode),
+                             media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
 
@@ -401,6 +422,13 @@ async def list_datasets():
         items.append({"id": path.stem, "name": path.name, "columns": columns, "n_rows": len(rows),
                       "size": path.stat().st_size, "sample": rows[:3]})
     return {"datasets": items}
+
+
+@app.delete("/api/datasets/{dataset_id}")
+async def delete_dataset(dataset_id: str):
+    path = _dataset_path(dataset_id)
+    path.unlink(missing_ok=True)
+    return {"deleted": dataset_id}
 
 
 @app.post("/api/datasets")
@@ -449,7 +477,8 @@ async def list_tools():
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "GlintMesh", "version": "2.0.0",
-            "gemini_configured": bool(GEMINI_API_KEYS), "model": GEMINI_MODEL, "mcp_enabled": MCP_ENABLED,
+            "gemini_configured": bool(GEMINI_API_KEYS), "model": GEMINI_MODEL, "models": GEMINI_MODELS,
+            "mcp_enabled": MCP_ENABLED,
             "mcp_server": "finflow-financial-tools", "protocol": "A2UI over MCP"}
 
 

@@ -469,8 +469,8 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
   <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="style_sub">Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).</p>
   <div id="style-presets" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
     <button class="btn-glass btn-sm" data-preset="minimalist"><span data-i18n="s_min">Minimalist enterprise</span></button>
-    <button class="btn-glass btn-sm" data-preset="neon"><span data-i18n="s_neon">Dark neon</span></button>
-    <button class="btn-glass btn-sm" data-preset="playful"><span data-i18n="s_play">Playful</span></button>
+    <button class="btn-glass btn-sm" data-preset="glass"><span data-i18n="s_glass">Glassmorphism</span></button>
+    <button class="btn-glass btn-sm" data-preset="dark"><span data-i18n="s_dark">Simple dark</span></button>
     <button class="btn-glass btn-sm" data-preset="corporate"><span data-i18n="s_corp">Classic corporate</span></button>
   </div>
   <textarea id="style-textarea" rows="4" maxlength="1000" data-i18n-ph="style_ph" placeholder="E.g.: dark mode with green accents and big numbers..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
@@ -479,6 +479,31 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
     <span style="flex:1;"></span>
     <button class="btn-glass" id="btn-style-reset"><span data-i18n="reset_default">Reset</span></button>
     <button class="btn-glass" id="btn-style-save" style="border-color:rgba(52,211,153,0.4); color:#34d399;"><i class="bi bi-check"></i> <span data-i18n="save">Save</span></button>
+  </div>
+  <hr style="border-color:var(--glass-border); margin:16px 0;" />
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:12px; font-weight:600; min-width:110px;" data-i18n="model_label">Model</span>
+      <select id="gen-model" style="flex:1; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--text-primary); outline:none;"></select>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:12px; font-weight:600; min-width:110px;" data-i18n="creativity">Creativity</span>
+      <input type="range" id="gen-temp" min="0" max="100" value="70" style="flex:1; accent-color:#34d399;" />
+      <span id="gen-temp-val" style="font-size:12px; color:var(--text-secondary); min-width:32px; text-align:right;">0.7</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:12px; font-weight:600; min-width:110px;" data-i18n="mode_label">Mode</span>
+      <div style="display:flex; gap:6px; flex:1;">
+        <button class="btn-glass btn-sm" id="mode-full" style="flex:1;"><span data-i18n="mode_full">Full interface</span></button>
+        <button class="btn-glass btn-sm" id="mode-data" style="flex:1;"><span data-i18n="mode_data">Data only</span></button>
+      </div>
+    </div>
+  </div>
+  <hr style="border-color:var(--glass-border); margin:16px 0;" />
+  <div>
+    <div style="font-size:12px; font-weight:700; margin-bottom:8px;" data-i18n="data_mgmt">Saved data</div>
+    <div id="settings-session" style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;"></div>
+    <div id="settings-datasets" style="display:flex; flex-direction:column; gap:6px;"></div>
   </div>
 </div>
 

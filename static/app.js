@@ -21,7 +21,9 @@ const I18N = {
     uploaded_ok: 'Dataset cargado', upload_fail: 'No se pudo cargar el dataset', rows: 'filas',
     settings: 'Configuración', style_title: 'Estilo de interfaces', style_sub: 'Describe cómo quieres que se vean todas tus interfaces. Vacío = minimalista empresarial (default).',
     style_ph: 'Ej.: modo oscuro con acentos verdes y números grandes...', save: 'Guardar', reset_default: 'Restablecer',
-    s_min: 'Minimalista empresarial', s_neon: 'Neón oscuro', s_play: 'Juguetón', s_corp: 'Corporativo clásico', style_saved: 'Estilo guardado',
+    s_min: 'Minimalista empresarial', s_glass: 'Glassmorphism', s_dark: 'Oscuro simple', s_corp: 'Corporativo clásico', style_saved: 'Estilo guardado',
+    model_label: 'Modelo', creativity: 'Creatividad', mode_label: 'Modo', mode_full: 'Interfaz completa', mode_data: 'Solo datos',
+    data_mgmt: 'Datos guardados', saved_session: 'Sesión guardada', session_empty: 'Sin sesión guardada', delete: 'Borrar',
     session_cleared: 'Sesión limpiada', no_export: 'Aún no hay interfaz para exportar', exported: 'Interfaz exportada',
     copied: 'Código copiado', mcp_disabled: 'MCP desactivado. Gemini funciona sin herramientas.', mcp_error: 'No se pudieron obtener herramientas',
     waiting: 'Esperando a Gemini...', generating: 'Generando interfaz...', analyzing: 'Analizando solicitud...',
@@ -46,7 +48,9 @@ const I18N = {
     uploaded_ok: 'Dataset uploaded', upload_fail: 'Could not upload dataset', rows: 'rows',
     settings: 'Settings', style_title: 'Interface style', style_sub: 'Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).',
     style_ph: 'E.g.: dark mode with green accents and big numbers...', save: 'Save', reset_default: 'Reset',
-    s_min: 'Minimalist enterprise', s_neon: 'Dark neon', s_play: 'Playful', s_corp: 'Classic corporate', style_saved: 'Style saved',
+    s_min: 'Minimalist enterprise', s_glass: 'Glassmorphism', s_dark: 'Simple dark', s_corp: 'Classic corporate', style_saved: 'Style saved',
+    model_label: 'Model', creativity: 'Creativity', mode_label: 'Mode', mode_full: 'Full interface', mode_data: 'Data only',
+    data_mgmt: 'Saved data', saved_session: 'Saved session', session_empty: 'No saved session', delete: 'Delete',
     session_cleared: 'Session cleared', no_export: 'No interface to export yet', exported: 'Interface exported',
     copied: 'Code copied to clipboard', mcp_disabled: 'MCP is disabled. Gemini works without tools.', mcp_error: 'Could not fetch tools',
     waiting: 'Waiting for Gemini...', generating: 'Generating interface...', analyzing: 'Analyzing request...',
@@ -188,19 +192,27 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&a
 const STYLE_KEY = 'glintmesh-style-v1';
 const STYLE_PRESETS = {
   minimalist: '',
-  neon: 'Dark neon terminal style: deep dark background, cyan and magenta glows, glassmorphism cards, futuristic trading-desk look, still readable numbers.',
-  playful: 'Playful modern style: light background, vibrant accent colors, rounded shapes and friendly headings, while keeping financial numbers clear and professional.',
+  glass: 'Glassmorphism style: frosted-glass cards with blur over a deep blue-purple gradient background, soft glows, cyan accents, modern and striking while keeping numbers readable.',
+  dark: 'Simple dark style: flat near-black background, light gray text, one subtle accent color, minimal borders, maximum readability, no gradients or effects.',
   corporate: 'Classic corporate banking style: white background, navy blue headers, conservative tables, dense and formal, maximum readability.',
 };
 let stylePrompt = '', stylePreset = 'minimalist';
+let genModel = '', genTemp = 0.7, genMode = 'full';
 try {
   const saved = JSON.parse(localStorage.getItem(STYLE_KEY) || 'null');
-  if (saved) { stylePrompt = saved.prompt || ''; stylePreset = saved.preset || 'minimalist'; }
+  if (saved) {
+    stylePrompt = saved.prompt || ''; stylePreset = saved.preset || 'minimalist';
+    genModel = saved.model || ''; genTemp = (typeof saved.temp === 'number') ? saved.temp : 0.7;
+    genMode = saved.mode === 'data' ? 'data' : 'full';
+  }
 } catch (e) {}
-function refreshSettingsDot() {
-  $('settings-dot').style.display = stylePrompt ? 'block' : 'none';
+function persistSettings() {
+  try { localStorage.setItem(STYLE_KEY, JSON.stringify({ prompt: stylePrompt, preset: stylePreset, model: genModel, temp: genTemp, mode: genMode })); } catch (e) {}
 }
-function openSettings() {
+function refreshSettingsDot() {
+  $('settings-dot').style.display = (stylePrompt || genModel || genMode === 'data' || genTemp !== 0.7) ? 'block' : 'none';
+}
+function syncSettingsUI() {
   const ta = $('style-textarea');
   ta.value = stylePrompt;
   $('style-count').textContent = ta.value.length + ' / 1000';
@@ -208,6 +220,20 @@ function openSettings() {
     const on = b.dataset.preset === stylePreset && (b.dataset.preset === 'minimalist' ? !stylePrompt : true);
     b.style.borderColor = on ? 'rgba(52,211,153,0.5)' : '';
   });
+  const sel = $('gen-model');
+  sel.innerHTML = '<option value="">default</option>' + (cachedHealth && cachedHealth.models ? cachedHealth.models.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') : '');
+  if (genModel && ![...sel.options].some((o) => o.value === genModel)) {
+    const opt = document.createElement('option'); opt.value = genModel; opt.textContent = genModel; opt.selected = true; sel.appendChild(opt);
+  }
+  $('gen-temp').value = Math.round(genTemp * 100);
+  $('gen-temp-val').textContent = Number(genTemp).toFixed(1);
+  $('mode-full').style.borderColor = genMode === 'full' ? 'rgba(52,211,153,0.5)' : '';
+  $('mode-data').style.borderColor = genMode === 'data' ? 'rgba(52,211,153,0.5)' : '';
+  refreshSettingsSession();
+}
+function openSettings() {
+  syncSettingsUI();
+  refreshSettingsDatasets();
   $('settings-modal').style.display = 'block';
   $('settings-overlay').style.display = 'block';
 }
@@ -229,20 +255,68 @@ $('style-textarea').addEventListener('input', (e) => {
   if (e.target.value !== (STYLE_PRESETS[stylePreset] || '')) stylePreset = 'custom';
   openSettingsRefresh();
 });
+$('gen-model').addEventListener('change', (e) => { genModel = e.target.value; persistSettings(); refreshSettingsDot(); });
+$('gen-temp').addEventListener('input', (e) => {
+  genTemp = Math.round(Number(e.target.value)) / 100;
+  $('gen-temp-val').textContent = genTemp.toFixed(1);
+  persistSettings(); refreshSettingsDot();
+});
+$('mode-full').addEventListener('click', () => { genMode = 'full'; persistSettings(); syncSettingsUI(); });
+$('mode-data').addEventListener('click', () => { genMode = 'data'; persistSettings(); syncSettingsUI(); });
 $('btn-style-save').addEventListener('click', () => {
   stylePrompt = $('style-textarea').value.trim().slice(0, 1000);
   if (!stylePrompt) stylePreset = 'minimalist';
-  try { localStorage.setItem(STYLE_KEY, JSON.stringify({ prompt: stylePrompt, preset: stylePreset })); } catch (e) {}
+  persistSettings();
   refreshSettingsDot();
   closeSettings();
   showToast(t('style_saved'), 'success');
 });
 $('btn-style-reset').addEventListener('click', () => {
-  stylePrompt = ''; stylePreset = 'minimalist';
+  stylePrompt = ''; stylePreset = 'minimalist'; genModel = ''; genTemp = 0.7; genMode = 'full';
   try { localStorage.removeItem(STYLE_KEY); } catch (e) {}
   refreshSettingsDot();
   closeSettings();
 });
+function refreshSettingsSession() {
+  let session = null;
+  try { session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
+  const el = $('settings-session');
+  if (session && (session.generatedHTML || session.agentMessage)) {
+    const when = session.ts ? new Date(session.ts).toLocaleString() : '';
+    el.innerHTML = '<span></span> <button class="btn-glass btn-sm" id="btn-wipe-session" style="margin-left:8px;"></button>';
+    el.querySelector('span').textContent = t('saved_session') + (when ? ' · ' + when : '');
+    el.querySelector('#btn-wipe-session').textContent = t('delete');
+    el.querySelector('#btn-wipe-session').addEventListener('click', () => {
+      try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+      refreshSettingsSession();
+    });
+  } else {
+    el.textContent = t('session_empty');
+  }
+}
+async function refreshSettingsDatasets() {
+  const box = $('settings-datasets');
+  box.innerHTML = '';
+  try {
+    const res = await fetch('/api/datasets');
+    const data = await res.json();
+    (data.datasets || []).forEach((d) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary);';
+      row.innerHTML = '<i class="bi bi-database" style="color:#34d399;"></i><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span><button class="btn-glass btn-sm"></button>';
+      row.querySelector('span').textContent = d.name + ' (' + d.n_rows + ')';
+      const btn = row.querySelector('button');
+      btn.textContent = t('delete');
+      btn.addEventListener('click', async () => {
+        await fetch('/api/datasets/' + encodeURIComponent(d.id), { method: 'DELETE' });
+        if (activeDataset && activeDataset.id === d.id) { activeDataset = null; refreshDatasetChip(); }
+        refreshSettingsDatasets();
+      });
+      box.appendChild(row);
+    });
+    if (!box.children.length) box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">' + t('no_datasets') + '</div>';
+  } catch (e) {}
+}
 refreshSettingsDot();
 
 // ─── User datasets ──────────────────────────────────────────────────────────
@@ -350,6 +424,9 @@ async function handleSubmit() {
     if (state.lastSummary) payload.context = state.lastSummary.slice(0, 800);
     if (activeDataset) payload.dataset_id = activeDataset.id;
     if (stylePrompt) payload.style_prompt = stylePrompt.slice(0, 1000);
+    if (genModel) payload.model = genModel;
+    if (genTemp !== 0.7) payload.temperature = genTemp;
+    if (genMode === 'data') payload.mode = 'data';
     const response = await fetch('/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: controller.signal,
@@ -620,6 +697,10 @@ function finalize(fullText) {
   }
   setStatus(state.generatedHTML ? t('done_ok') : t('resp_ok'), 'success');
   progressBar.style.display = 'none';
+  if (genMode === 'data') {
+    const a2uiTab = document.querySelector('.tab-btn[data-tab="a2ui"]');
+    if (a2uiTab) a2uiTab.click();
+  }
   state.lastSummary = (agentBubble.style.display === 'none' ? fullText : agentBubbleText.textContent).slice(0, 800);
   saveSession();
 }
