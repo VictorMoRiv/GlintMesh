@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from google import genai
@@ -47,6 +47,11 @@ When MCP tools are used, structure the visible output as A2UI-style surfaces (ca
 """
 
 
+class ImageAttachment(BaseModel):
+    mime: str = Field(pattern=r"^image/(png|jpeg|webp|gif)$")
+    data: str = Field(min_length=100, max_length=2000000)
+
+
 class GenerateRequest(BaseModel):
     message: str = Field(min_length=1, max_length=500)
     lang: str = Field(default="es", pattern="^(es|en)$")
@@ -56,6 +61,7 @@ class GenerateRequest(BaseModel):
     model: str | None = Field(default=None, max_length=80)
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
     mode: str = Field(default="full", pattern="^(full|data)$")
+    images: list[ImageAttachment] = Field(default_factory=list, max_length=3)
 
     @field_validator("message", mode="before")
     @classmethod
@@ -293,7 +299,7 @@ def gemini_error_message(error):
 async def run_agent_stream(user_message: str, lang: str = "es", context: str | None = None,
                      dataset_text: str | None = None, style_prompt: str | None = None,
                      model_choice: str | None = None, temperature: float | None = None,
-                     mode: str = "full") -> AsyncIterator[str]:
+                     mode: str = "full", images: list | None = None) -> AsyncIterator[str]:
     yield event("status", content="Connecting to Gemini...")
     mcp_tools = []
     if MCP_ENABLED:
@@ -303,7 +309,19 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
             yield event("error", content="MCP tools are unavailable. Check the MCP server or set MCP_ENABLED=false.")
             return
 
-    contents = [types.Content(role="user", parts=[types.Part(text=user_message)])]
+    first_parts: list = [types.Part(text=user_message)]
+    for img in (images or [])[:3]:
+        try:
+            import base64 as _b64
+            payload = img.get("data", "") if isinstance(img, dict) else img.data
+            mime = img.get("mime", "image/png") if isinstance(img, dict) else img.mime
+            raw = _b64.b64decode(payload)
+            if not raw or len(raw) > 1500000:
+                continue
+            first_parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
+        except Exception:
+            continue
+    contents = [types.Content(role="user", parts=first_parts)]
     if context:
         contents.append(types.Content(role="user", parts=[types.Part(
             text="Previous turn summary for continuity (adapt the new interface to it when relevant): " + context[:1500]
@@ -406,11 +424,87 @@ async def generate_interface(body: GenerateRequest):
     if not GEMINI_API_KEYS:
         raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY in the server .env file before generating.")
     dataset_text = load_dataset_context(body.dataset_id) if body.dataset_id else None
+    images = [img.model_dump() for img in (body.images or [])]
     return StreamingResponse(run_agent_stream(body.message, body.lang, body.context, dataset_text,
-                                              body.style_prompt, body.model, body.temperature, body.mode),
+                                              body.style_prompt, body.model, body.temperature, body.mode,
+                                              images),
                              media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
+
+
+USERS_FILE = BASE_DIR / "users.json"
+
+
+class AuthBody(BaseModel):
+    user: str = Field(min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_-]+$")
+    password: str = Field(min_length=4, max_length=100)
+
+
+def _load_users() -> dict:
+    try:
+        data = json.loads(USERS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_users(data: dict) -> None:
+    USERS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _hash_password(password: str, salt: str) -> str:
+    import hashlib
+    return hashlib.sha256(f"{salt}:{password}".encode("utf-8")).hexdigest()
+
+
+@app.post("/api/auth/register")
+async def auth_register(body: AuthBody):
+    users = _load_users()
+    key = body.user.lower()
+    if key in users:
+        raise HTTPException(status_code=409, detail="User already exists.")
+    salt = uuid.uuid4().hex
+    users[key] = {"user": body.user, "salt": salt,
+                  "hash": _hash_password(body.password, salt), "sessions": []}
+    _save_users(users)
+    return {"user": body.user}
+
+
+@app.post("/api/auth/login")
+async def auth_login(body: AuthBody):
+    users = _load_users()
+    key = body.user.lower()
+    record = users.get(key)
+    if not record or record.get("hash") != _hash_password(body.password, record.get("salt", "")):
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
+    token = uuid.uuid4().hex + uuid.uuid4().hex
+    record.setdefault("sessions", []).append(token)
+    _save_users(users)
+    return {"user": record["user"], "token": token}
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request):
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.lower().startswith("bearer ") else ""
+    users = _load_users()
+    for record in users.values():
+        if token and token in record.get("sessions", []):
+            return {"user": record["user"]}
+    return {"user": None}
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(body: dict):
+    token = str(body.get("token", ""))
+    users = _load_users()
+    for record in users.values():
+        sessions = record.get("sessions", [])
+        if token in sessions:
+            sessions.remove(token)
+    _save_users(users)
+    return {"ok": True}
 
 
 @app.get("/api/datasets")
@@ -435,41 +529,6 @@ class ToolCallRequest(BaseModel):
 
 class ShareRequest(BaseModel):
     html: str = Field(min_length=100, max_length=500000)
-
-
-ALERTS_FILE = BASE_DIR / "alerts.json"
-ALERT_CHECK_INTERVAL_S = 300
-
-
-class AlertCreate(BaseModel):
-    symbol: str = Field(min_length=1, max_length=12)
-    op: str = Field(default="below", pattern="^(below|above)$")
-    target: float = Field(gt=0, le=10000000)
-
-    @field_validator("symbol", mode="before")
-    @classmethod
-    def upper_symbol(cls, value):
-        return value.strip().upper() if isinstance(value, str) else value
-
-
-def _load_alerts() -> list[dict]:
-    try:
-        data = json.loads(ALERTS_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
-
-
-def _save_alerts(alerts: list[dict]) -> None:
-    ALERTS_FILE.write_text(json.dumps(alerts, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _eval_alert(alert: dict, price: float) -> bool:
-    try:
-        target = float(alert.get("target", 0))
-    except (TypeError, ValueError):
-        return False
-    return price <= target if alert.get("op") == "below" else price >= target
 
 
 @app.post("/api/tool-call")
@@ -562,107 +621,8 @@ async def list_tools():
 async def health():
     return {"status": "ok", "service": "GlintMesh", "version": "2.0.0",
             "gemini_configured": bool(GEMINI_API_KEYS), "model": GEMINI_MODEL, "models": GEMINI_MODELS,
-            "mcp_enabled": MCP_ENABLED, "alerts": len(_load_alerts()),
+            "mcp_enabled": MCP_ENABLED,
             "mcp_server": "finflow-financial-tools", "protocol": "A2UI over MCP"}
-
-
-@app.get("/api/alerts")
-async def list_alerts():
-    """Saved price alerts (local JSON, no Gemini quota used)."""
-    return {"alerts": _load_alerts()}
-
-
-@app.post("/api/alerts")
-async def create_alert(body: AlertCreate):
-    alerts = _load_alerts()
-    alert = {"id": uuid.uuid4().hex[:8], "symbol": body.symbol, "op": body.op,
-             "target": body.target, "triggered": False, "last_price": None,
-             "triggered_at": None}
-    alerts.append(alert)
-    _save_alerts(alerts)
-    return alert
-
-
-@app.delete("/api/alerts/{alert_id}")
-async def delete_alert(alert_id: str):
-    if not re.fullmatch(r"[a-f0-9]{8}", alert_id or ""):
-        raise HTTPException(status_code=404, detail="Alert not found.")
-    alerts = _load_alerts()
-    kept = [a for a in alerts if a.get("id") != alert_id]
-    if len(kept) == len(alerts):
-        raise HTTPException(status_code=404, detail="Alert not found.")
-    _save_alerts(kept)
-    return {"deleted": alert_id}
-
-
-@app.post("/api/alerts/check")
-async def check_alerts():
-    """Evaluate all saved alerts against live quotes (free: no Gemini call)."""
-    if not MCP_ENABLED:
-        raise HTTPException(status_code=503, detail="MCP tools are unavailable.")
-    try:
-        tools = await mcp_client.list_tools()
-    except Exception:
-        raise HTTPException(status_code=503, detail="MCP tools are unavailable.")
-    if "get_live_quote" not in {t.name for t in tools}:
-        raise HTTPException(status_code=503, detail="Live quotes unavailable.")
-    alerts = _load_alerts()
-    checked, triggered = 0, 0
-    for alert in alerts:
-        try:
-            data = await mcp_client.call_tool("get_live_quote", {"symbol": alert.get("symbol", "")})
-            price = float(data.get("price"))
-        except Exception:
-            continue
-        checked += 1
-        alert["last_price"] = round(price, 2)
-        if _eval_alert(alert, price):
-            if not alert.get("triggered"):
-                from datetime import datetime, timezone
-                alert["triggered_at"] = datetime.now(timezone.utc).isoformat()
-            alert["triggered"] = True
-            triggered += 1
-        else:
-            alert["triggered"] = False
-    _save_alerts(alerts)
-    return {"checked": checked, "triggered": triggered, "alerts": alerts}
-
-
-async def _alerts_loop():
-    await asyncio.sleep(ALERT_CHECK_INTERVAL_S)
-    while True:
-        try:
-            alerts = _load_alerts()
-            if alerts and MCP_ENABLED:
-                try:
-                    tools = await mcp_client.list_tools()
-                    names = {t.name for t in tools}
-                except Exception:
-                    names = set()
-                if "get_live_quote" in names:
-                    for alert in alerts:
-                        try:
-                            data = await mcp_client.call_tool("get_live_quote", {"symbol": alert.get("symbol", "")})
-                            price = float(data.get("price"))
-                        except Exception:
-                            continue
-                        alert["last_price"] = round(price, 2)
-                        if _eval_alert(alert, price):
-                            if not alert.get("triggered"):
-                                from datetime import datetime, timezone
-                                alert["triggered_at"] = datetime.now(timezone.utc).isoformat()
-                            alert["triggered"] = True
-                        else:
-                            alert["triggered"] = False
-                    _save_alerts(alerts)
-        except Exception:
-            pass
-        await asyncio.sleep(ALERT_CHECK_INTERVAL_S)
-
-
-@app.on_event("startup")
-async def start_alerts_loop():
-    asyncio.create_task(_alerts_loop())
 
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")

@@ -299,14 +299,13 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         <i class="bi bi-database"></i>
         <span data-i18n="data">Data</span>
       </button>
-      <button class="btn-glass" id="btn-alerts" title="Price alerts">
-        <i class="bi bi-bell"></i>
-        <span data-i18n="alerts">Alerts</span>
-        <span id="alerts-badge" style="display:none; background:rgba(239,68,68,0.25); border:1px solid rgba(239,68,68,0.5); color:#f87171; font-size:10px; font-weight:700; padding:0 6px; border-radius:10px;">0</span>
-      </button>
       <button class="btn-glass" id="btn-settings" title="Generation settings" style="position:relative;">
         <i class="bi bi-gear"></i>
         <span id="settings-dot" style="display:none; position:absolute; top:4px; right:4px; width:7px; height:7px; border-radius:50%; background:#34d399;"></span>
+      </button>
+      <button class="btn-glass" id="btn-auth" title="Sign in">
+        <i class="bi bi-person-circle"></i>
+        <span id="auth-label" data-i18n="signin">Sign in</span>
       </button>
       <button class="btn-glass" id="btn-clear" title="Clear current session">
         <i class="bi bi-arrow-counterclockwise"></i>
@@ -456,9 +455,13 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
           <button id="dataset-chip-x" style="margin-left:auto; background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:14px;" title="Remove">&times;</button>
         </div>
         <div id="input-wrapper">
+          <button id="mic-btn" title="Voice input" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-mic"></i></button>
+          <button id="img-btn" title="Attach images" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-image"></i></button>
           <textarea id="chat-textarea" rows="1" maxlength="500" data-i18n-ph="placeholder" placeholder="Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'"></textarea>
           <button id="send-btn" title="Generate interface"><i class="bi bi-arrow-up"></i></button>
         </div>
+        <input type="file" id="img-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none;" />
+        <div id="img-strip" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap;"></div>
         <div id="input-footer">
           <span data-i18n="disclaimer">GlintMesh may produce simulated financial data for demonstration purposes</span>
           <span id="char-count">0 / 500</span>
@@ -580,28 +583,23 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
 
 <div id="toast-container"></div>
 
-<!-- Alerts modal -->
-<div id="alerts-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
-<div id="alerts-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(480px,94vw); max-height:84vh; overflow-y:auto; background:rgba(10,15,40,0.95); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
-  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-bell" style="color:#fbbf24;"></i> <span data-i18n="alerts_title">Price alerts</span></h5>
-    <button class="btn-glass" id="btn-close-alerts" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+<!-- Auth modal -->
+<div id="auth-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
+<div id="auth-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(400px,92vw); background:rgba(10,15,40,0.95); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-person-circle" style="color:#34d399;"></i> <span data-i18n="signin_title">Sign in</span></h5>
+    <button class="btn-glass" id="btn-close-auth" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
   </div>
-  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="alerts_sub">Server checks live quotes every 5 min. No Gemini quota used.</p>
-  <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
-    <input id="alert-symbol" maxlength="12" placeholder="AAPL" style="flex:1; min-width:80px; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--text-primary); outline:none; text-transform:uppercase;" />
-    <select id="alert-op" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--text-primary); outline:none;">
-      <option value="below">below</option>
-      <option value="above">above</option>
-    </select>
-    <input id="alert-target" type="number" min="0" step="0.01" placeholder="150.00" style="flex:1; min-width:90px; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--text-primary); outline:none;" />
-    <button class="btn-glass" id="btn-add-alert" style="border-color:rgba(52,211,153,0.4); color:#34d399;"><i class="bi bi-plus"></i></button>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <input id="auth-user" maxlength="30" placeholder="user" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+    <input id="auth-pass" type="password" maxlength="100" placeholder="password" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+    <div id="auth-note" style="font-size:11px; color:var(--text-muted);">Local account. Optional for demo.</div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn-glass" id="btn-login" style="flex:1; border-color:rgba(52,211,153,0.4); color:#34d399;"><span data-i18n="signin">Sign in</span></button>
+      <button class="btn-glass" id="btn-register" style="flex:1;"><span data-i18n="signup">Register</span></button>
+      <button class="btn-glass" id="btn-logout" style="flex:1; display:none; border-color:rgba(239,68,68,0.4); color:#f87171;"><span>Out</span></button>
+    </div>
   </div>
-  <div style="display:flex; gap:8px; margin-bottom:12px;">
-    <button class="btn-glass btn-sm" id="btn-check-alerts"><i class="bi bi-arrow-clockwise"></i> <span data-i18n="check_now">Check now</span></button>
-    <span id="alerts-note" style="font-size:11px; color:var(--text-muted); align-self:center;"></span>
-  </div>
-  <div id="alerts-list" style="display:flex; flex-direction:column; gap:8px;"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

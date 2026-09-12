@@ -61,18 +61,20 @@ Con MCP activado, el backend obtiene los esquemas, entrega las herramientas a Ge
 - `DELETE /api/datasets/{id}`: borra un dataset.
 - `POST /api/tool-call`: re-ejecuta un MCP sin Gemini (refresh gratis de superficies A2UI).
 - `POST /api/share` + `GET /share/{id}`: link compartible de una interfaz generada.
-- `POST /api/generate`: JSON `{"message":"...", "lang":"es"|"en", "context":"resumen opcional", "dataset_id":"opcional"}`; `message` 1-500 chars, `context` hasta 2000. Respuesta SSE con eventos `status`, `text_chunk`, `tool_call`, `tool_result`, `error` y `done`. La UI guarda la última sesión en localStorage y reenvía su resumen como `context` para continuidad.
+- `POST /api/generate`: JSON `{"message":"...", "lang":"es"|"en", "context":"resumen opcional", "dataset_id":"opcional", "images":[{"mime":"image/png","data":"base64"}]}`; `message` 1-500 chars, `context` hasta 2000, máx 3 imágenes (cada una 1.5 MB, png/jpeg/webp/gif) que llegan a Gemini como `inline_data`. Respuesta SSE con eventos `status`, `text_chunk`, `tool_call`, `tool_result`, `error` y `done`. La UI guarda la última sesión en localStorage y reenvía su resumen como `context` para continuidad.
+- `POST /api/auth/register` + `POST /api/auth/login` + `GET /api/auth/me` (Bearer) + `POST /api/auth/logout`: cuentas locales en `users.json` (hash sha256+salt, gitignored). Login opcional para demo; la UI muestra el usuario y manda el token si existe.
 - `GET /api/tools`: herramientas disponibles; lista vacía cuando MCP está desactivado.
 - `GET /health`: modelo y presencia de configuración, sin exponer la clave. No realiza una llamada de validación a Gemini.
-- `GET /api/alerts` + `POST /api/alerts` + `DELETE /api/alerts/{id}` + `POST /api/alerts/check`: alertas de precio guardadas en `alerts.json` (ej. AAPL below 150). El servidor las revisa cada 5 min contra `get_live_quote`; sin gastar cuota de Gemini.
 
 Los errores de validación usan HTTP 422; una clave sin configurar usa HTTP 503. Los errores ocurridos durante la generación usan el evento SSE `error` y no emiten `done`. La UI muestra el error con botón **Retry** en 1 clic, y el backend rota keys/modelos ante 429/404/5xx antes de fallar.
 
 ## Demo 3 minutos (ver DEMO-3MIN.md)
 
-1. `Hola` → respuesta de texto (0:30).
+1. `Hola` → respuesta de texto (0:30). Micrófono para dictar (Web Speech API, Chrome/Edge) y clip para adjuntar hasta 3 imágenes que ve Gemini.
 2. `Dashboard de portafolio AAPL, MSFT, NVDA` → Preview + A2UI + **Compose dashboard** combina N superficies en 1 (1:30).
-3. **Refresh data** sin cuota + crear alerta `AAPL below 150` + **Check now** (1:00).
+3. **Refresh data** sin cuota + **Retry** en 1 clic si falla Gemini + **Sign in** local (1:00).
+
+Compatibilidad: voz e imágenes con degradado — si el navegador no soporta dictado, el botón avisa; sin login todo sigue funcionando (demo-friendly).
 
 ## Pruebas
 

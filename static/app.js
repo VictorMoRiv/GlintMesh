@@ -77,8 +77,8 @@ const I18N = {
 };
 let lang = localStorage.getItem('glintmesh-lang') || 'es';
 if (!I18N[lang]) lang = 'es';
-Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', alerts: 'Alertas', alerts_title: 'Alertas de precio', alerts_sub: 'El servidor revisa cotizaciones en vivo cada 5 min. Sin gastar cuota de Gemini.', check_now: 'Revisar ahora', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', alert_added: 'Alerta guardada', alert_deleted: 'Alerta borrada', no_alerts: 'Sin alertas. Crea la primera arriba.' });
-Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', alerts: 'Alerts', alerts_title: 'Price alerts', alerts_sub: 'Server checks live quotes every 5 min. No Gemini quota used.', check_now: 'Check now', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', alert_added: 'Alert saved', alert_deleted: 'Alert deleted', no_alerts: 'No alerts yet. Create the first one above.' });
+Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', signin: 'Entrar', signup: 'Registro', signin_title: 'Iniciar sesión', voice_on: 'Escuchando... habla ahora', voice_off: 'Voz no disponible en este navegador', img_many: 'Máximo 3 imágenes', img_big: 'Imagen muy pesada (máx 1.5 MB)' });
+Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', signin: 'Sign in', signup: 'Register', signin_title: 'Sign in', voice_on: 'Listening... speak now', voice_off: 'Voice not available in this browser', img_many: 'Max 3 images', img_big: 'Image too large (max 1.5 MB)' });
 const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k;
 
 function applyLang(next) {
@@ -392,7 +392,8 @@ async function wipeAll(keepImportant) {
     applyUI(); refreshSettingsDot();
   }
   if (activeDataset && !(keepImportant && imp.datasets.includes(activeDataset.id))) {
-    activeDataset = null; refreshDatasetChip();
+  activeDataset = null; refreshDatasetChip();
+  attachedImages = []; renderImgStrip();
   }
   closeWipe(); closeSettings();
   refreshSettingsSession(); refreshSettingsDatasets();
@@ -620,6 +621,7 @@ async function handleSubmit() {
   destroyA2UICharts();
   $('btn-retry').style.display = 'none'; state.lastError = '';
   chatTextarea.value = ''; chatTextarea.style.height = 'auto'; charCount.textContent = '0 / 500';
+  attachedImages = []; renderImgStrip();
   sendBtn.disabled = true; progressBar.style.display = 'flex';
   welcomeState.style.display = 'none'; generatedWrapper.classList.add('visible');
   agentBubble.style.display = 'flex'; agentBubbleText.textContent = t('waiting');
@@ -637,9 +639,10 @@ async function handleSubmit() {
     if (genModel) payload.model = genModel;
     if (genTemp !== 0.7) payload.temperature = genTemp;
     if (genMode === 'data') payload.mode = 'data';
+    if (attachedImages.length) payload.images = attachedImages.map(({ mime, data }) => ({ mime, data }));
     state.lastPayload = { ...payload };
     const response = await fetch('/api/generate', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload), signal: controller.signal,
     });
     if (!response.ok) {
@@ -974,6 +977,104 @@ function showToast(message, type = 'info') {
 }
 
 let cachedHealth = null;
+// ─── Voz: dictado Web Speech API (degradado si no hay soporte) ─────────────
+let recog = null, listening = false;
+(function initVoice() {
+  const btn = $('mic-btn');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { btn.style.opacity = '0.35'; btn.title = t('voice_off'); btn.addEventListener('click', () => showToast(t('voice_off'), 'error')); return; }
+  const r = new SR();
+  r.interimResults = false; r.maxAlternatives = 1;
+  r.onresult = (e) => {
+    const txt = (e.results && e.results[0] && e.results[0][0] && e.results[0][0].transcript) || '';
+    if (txt) { chatTextarea.value = (chatTextarea.value ? chatTextarea.value + ' ' : '') + txt.trim(); chatTextarea.dispatchEvent(new Event('input')); chatTextarea.focus(); }
+  };
+  r.onend = () => { listening = false; btn.style.color = ''; };
+  r.onerror = () => { listening = false; btn.style.color = ''; };
+  recog = r;
+  btn.addEventListener('click', () => {
+    if (listening) { try { r.stop(); } catch (e) {} return; }
+    try { r.lang = lang === 'es' ? 'es-ES' : 'en-US'; r.start(); listening = true; btn.style.color = 'var(--accent-red)'; showToast(t('voice_on'), 'info'); } catch (e) {}
+  });
+})();
+
+// ─── Imágenes al prompt (base64, máx 3 x 1.5MB) ─────────────────────────────
+let attachedImages = [];
+$('img-btn').addEventListener('click', () => $('img-input').click());
+$('img-input').addEventListener('change', (e) => {
+  const files = [...(e.target.files || [])];
+  for (const f of files) {
+    if (attachedImages.length >= 3) { showToast(t('img_many'), 'error'); break; }
+    if (f.size > 1500000) { showToast(t('img_big'), 'error'); continue; }
+    const rd = new FileReader();
+    rd.onload = () => {
+      const url = String(rd.result || '');
+      const b64 = url.split(',')[1] || '';
+      if (!b64) return;
+      attachedImages.push({ mime: f.type || 'image/png', data: b64, url });
+      renderImgStrip();
+    };
+    rd.readAsDataURL(f);
+  }
+  e.target.value = '';
+});
+function renderImgStrip() {
+  const strip = $('img-strip');
+  strip.innerHTML = '';
+  if (!attachedImages.length) { strip.style.display = 'none'; return; }
+  strip.style.display = 'flex';
+  attachedImages.forEach((im, i) => {
+    const box = document.createElement('div');
+    box.style.cssText = 'position:relative; width:64px; height:64px; border-radius:10px; overflow:hidden; border:1px solid var(--glass-border);';
+    box.innerHTML = '<img style="width:100%;height:100%;object-fit:cover;" /><button style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;">×</button>';
+    box.querySelector('img').src = im.url;
+    box.querySelector('button').addEventListener('click', () => { attachedImages.splice(i, 1); renderImgStrip(); });
+    strip.appendChild(box);
+  });
+}
+
+// ─── Login local opcional ───────────────────────────────────────────────────
+const AUTH_KEY = 'glintmesh-auth-v1';
+function authHeaders() {
+  try {
+    const s = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+    if (s && s.token) return { 'Authorization': 'Bearer ' + s.token };
+  } catch (e) {}
+  return {};
+}
+function refreshAuthLabel() {
+  let user = null;
+  try { user = (JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}).user || null; } catch (e) {}
+  $('auth-label').textContent = user || t('signin');
+  $('btn-logout').style.display = user ? 'block' : 'none';
+}
+$('btn-auth').addEventListener('click', () => { refreshAuthLabel(); $('auth-modal').style.display = 'block'; $('auth-overlay').style.display = 'block'; });
+$('btn-close-auth').addEventListener('click', () => { $('auth-modal').style.display = 'none'; $('auth-overlay').style.display = 'none'; });
+$('auth-overlay').addEventListener('click', () => { $('auth-modal').style.display = 'none'; $('auth-overlay').style.display = 'none'; });
+$('btn-register').addEventListener('click', async () => {
+  const user = $('auth-user').value.trim(), password = $('auth-pass').value;
+  const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
+  $('auth-note').textContent = res.ok ? 'registered — now sign in' : 'register failed (' + res.status + ')';
+});
+$('btn-login').addEventListener('click', async () => {
+  const user = $('auth-user').value.trim(), password = $('auth-pass').value;
+  const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
+  if (!res.ok) { $('auth-note').textContent = 'login failed (' + res.status + ')'; return; }
+  const data = await res.json();
+  try { localStorage.setItem(AUTH_KEY, JSON.stringify(data)); } catch (e) {}
+  refreshAuthLabel();
+  $('auth-modal').style.display = 'none'; $('auth-overlay').style.display = 'none';
+  showToast(data.user, 'success');
+});
+$('btn-logout').addEventListener('click', async () => {
+  try {
+    const s = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+    if (s && s.token) await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: s.token }) });
+  } catch (e) {}
+  try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
+  refreshAuthLabel();
+});
+refreshAuthLabel();
 // ─── 3. Retry 1-clic ────────────────────────────────────────────────────────
 $('btn-retry').addEventListener('click', () => {
   if (state.isGenerating) return;
@@ -1011,71 +1112,6 @@ $('btn-compose').addEventListener('click', () => {
   a2uiBadge.style.display = 'inline-flex'; a2uiBadge.textContent = state.a2ui.length;
   showToast(t('composed_ok'), 'success');
 });
-
-// ─── 7. Alerts UI ───────────────────────────────────────────────────────────
-const alertsModal = $('alerts-modal'), alertsOverlay = $('alerts-overlay');
-function openAlerts() { alertsModal.style.display = 'block'; alertsOverlay.style.display = 'block'; loadAlerts(); }
-function closeAlerts() { alertsModal.style.display = 'none'; alertsOverlay.style.display = 'none'; }
-$('btn-alerts').addEventListener('click', openAlerts);
-$('btn-close-alerts').addEventListener('click', closeAlerts);
-alertsOverlay.addEventListener('click', closeAlerts);
-async function loadAlerts() {
-  const list = $('alerts-list');
-  list.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);">…</div>';
-  try {
-    const res = await fetch('/api/alerts');
-    const data = await res.json();
-    const items = data.alerts || [];
-    updateAlertsBadge(items);
-    if (!items.length) { list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">' + t('no_alerts') + '</div>'; return; }
-    list.innerHTML = '';
-    items.forEach((a) => {
-      const row = document.createElement('div');
-      row.className = 'mcp-tool';
-      row.style.borderLeft = a.triggered ? '3px solid var(--accent-red)' : '';
-      row.innerHTML = '<div class="mcp-name"><span class="mcp-dot' + (a.triggered ? '' : ' off') + '"></span><span></span>'
-        + '<span style="margin-left:auto;font-size:10px;">' + (a.triggered ? 'TRIGGERED' : esc(a.op + ' ' + a.target)) + '</span></div>'
-        + '<div class="mcp-desc"></div>'
-        + '<button class="btn-glass btn-sm" style="margin-top:8px;">' + t('delete') + '</button>';
-      row.querySelector('.mcp-name span:nth-child(2)').textContent = a.symbol;
-      row.querySelector('.mcp-desc').textContent = (a.last_price != null ? 'last ' + a.last_price : 'not checked yet') + (a.triggered_at ? ' · ' + a.triggered_at.slice(0, 16) : '');
-      row.querySelector('button').addEventListener('click', async () => {
-        await fetch('/api/alerts/' + encodeURIComponent(a.id), { method: 'DELETE' });
-        showToast(t('alert_deleted'), 'info'); loadAlerts();
-      });
-      list.appendChild(row);
-    });
-  } catch (e) { list.innerHTML = '<div style="font-size:12px;color:var(--accent-red);">unreachable</div>'; }
-}
-function updateAlertsBadge(items) {
-  const n = items.filter((a) => a.triggered).length;
-  const b = $('alerts-badge');
-  b.style.display = n ? 'inline-block' : 'none';
-  b.textContent = n;
-}
-$('btn-add-alert').addEventListener('click', async () => {
-  const symbol = $('alert-symbol').value.trim().toUpperCase();
-  const target = Number($('alert-target').value);
-  if (!symbol || !(target > 0)) return;
-  const res = await fetch('/api/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ symbol, op: $('alert-op').value, target }) });
-  if (res.ok) { $('alert-symbol').value = ''; $('alert-target').value = ''; showToast(t('alert_added'), 'success'); loadAlerts(); }
-});
-$('btn-check-alerts').addEventListener('click', async () => {
-  $('alerts-note').textContent = '…';
-  try {
-    const res = await fetch('/api/alerts/check', { method: 'POST' });
-    const data = await res.json();
-    $('alerts-note').textContent = new Date().toLocaleTimeString() + ' · ' + data.checked + ' checked, ' + data.triggered + ' triggered';
-  } catch (e) { $('alerts-note').textContent = 'check failed'; }
-  loadAlerts();
-});
-setInterval(async () => {
-  try {
-    const res = await fetch('/api/alerts');
-    if (res.ok) updateAlertsBadge(((await res.json()).alerts || []));
-  } catch (e) {}
-}, 60000);
 async function loadConfiguration() {
   try {
     const res = await fetch('/health');

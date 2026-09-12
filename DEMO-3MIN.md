@@ -13,11 +13,9 @@ Total 3:00. Servidor ya corriendo en http://127.0.0.1:8000 con MCP_ENABLED=true.
 3. Clic **Compose dashboard**: "N superficies combinadas en 1, sin otra llamada a Gemini".
 4. Clic **Refresh data**: "Actualiza todo sin gastar cuota".
 
-## 2:00-2:45 — Alertas + Retry
-1. Header **Alerts** → crea `AAPL below 150` → **Check now**.
-2. Badge rojo = triggered con last_price y hora.
-3. "El servidor revisa cada 5 min (alerts.json, sin Gemini)".
-4. Si falla Gemini: "Error visible con Retry en 1 clic; el backend rota 3 keys x 7 modelos".
+## 2:00-2:45 — Refresh + Retry
+1. Clic **Refresh data**: "Actualiza todo sin gastar cuota".
+2. Si falla Gemini: "Error visible con Retry en 1 clic; el backend rota 3 keys x 7 modelos".
 
 ## 2:45-3:00 — Cierre
 1. Export / Share link.
@@ -26,4 +24,3 @@ Total 3:00. Servidor ya corriendo en http://127.0.0.1:8000 con MCP_ENABLED=true.
 ## Screenshots (tomar antes de presentar)
 - `docs/shot-dashboard.png`: Preview con dashboard.
 - `docs/shot-a2ui.png`: A2UI + tarjeta COMPOSED.
-- `docs/shot-alerts.png`: modal de alertas con 1 triggered.
