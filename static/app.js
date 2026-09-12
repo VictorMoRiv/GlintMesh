@@ -61,7 +61,8 @@ function applyLang(next) {
 }
 
 // ─── State ──────────────────────────────────────────────────────────────────
-const state = { isGenerating: false, controller: null, generatedHTML: '', agentMessage: '', toolCalls: [], a2ui: [], charts: [] };
+const state = { isGenerating: false, controller: null, generatedHTML: '', agentMessage: '', toolCalls: [], a2ui: [], charts: [], lastSummary: '' };
+const SESSION_KEY = 'glintmesh-session-v1';
 
 const $ = (id) => document.getElementById(id);
 const chatTextarea = $('chat-textarea'), sendBtn = $('send-btn'), toolFeed = $('tool-feed'),
@@ -108,7 +109,8 @@ $('btn-clear').addEventListener('click', () => {
   state.controller?.abort(); state.controller = null; state.isGenerating = false; state.a2ui = [];
   destroyA2UICharts();
   sendBtn.disabled = false; progressBar.style.display = 'none'; previewIframe.srcdoc = '';
-  state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = [];
+  state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.lastSummary = '';
+  try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   welcomeState.style.display = 'flex'; generatedWrapper.classList.remove('visible');
   agentBubble.style.display = 'none'; previewContainer.style.display = 'none'; agentBubbleText.textContent = '';
   codeOutput.innerHTML = '<code style="color:var(--text-muted); font-size:12px;">// Generated code will appear here...</code>';
@@ -202,9 +204,11 @@ async function handleSubmit() {
 
   let fullText = '', completed = false;
   try {
+    const payload = { message, lang };
+    if (state.lastSummary) payload.context = state.lastSummary.slice(0, 800);
     const response = await fetch('/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, lang }), signal: controller.signal,
+      body: JSON.stringify(payload), signal: controller.signal,
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -472,6 +476,37 @@ function finalize(fullText) {
   }
   setStatus(state.generatedHTML ? t('done_ok') : t('resp_ok'), 'success');
   progressBar.style.display = 'none';
+  state.lastSummary = (agentBubble.style.display === 'none' ? fullText : agentBubbleText.textContent).slice(0, 800);
+  saveSession();
+}
+
+function saveSession() {
+  try {
+    if (!state.generatedHTML && !state.agentMessage) return;
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      lang, agentMessage: agentBubbleText.textContent || '', generatedHTML: state.generatedHTML || '',
+      ts: Date.now(),
+    }));
+  } catch (e) {}
+}
+
+function restoreSession() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
+  if (!saved || (!saved.generatedHTML && !saved.agentMessage)) return;
+  if (saved.lang && I18N[saved.lang]) applyLang(saved.lang);
+  welcomeState.style.display = 'none';
+  generatedWrapper.classList.add('visible');
+  state.generatedHTML = saved.generatedHTML || '';
+  state.lastSummary = (saved.agentMessage || '').slice(0, 800);
+  if (saved.agentMessage) { agentBubble.style.display = 'flex'; agentBubbleText.textContent = saved.agentMessage; }
+  if (state.generatedHTML) {
+    renderPreview(state.generatedHTML);
+    try { codeOutput.innerHTML = hljs.highlight(state.generatedHTML, { language: 'html' }).value; }
+    catch (e) { codeOutput.textContent = state.generatedHTML; }
+    codeBadge.style.display = 'inline-flex'; btnCopyCode.style.display = 'flex';
+  }
+  setStatus(t('resp_ok'), 'success');
 }
 
 function renderPreview(html) {
@@ -515,4 +550,5 @@ function refreshConfigLabels() {
   if (v) v.textContent = 'GlintMesh • v' + (cachedHealth.version || '2.0.0');
 }
 applyLang(lang);
+restoreSession();
 loadConfiguration();

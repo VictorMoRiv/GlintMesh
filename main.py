@@ -41,11 +41,20 @@ When MCP tools are used, structure the visible output as A2UI-style surfaces (ca
 class GenerateRequest(BaseModel):
     message: str = Field(min_length=1, max_length=500)
     lang: str = Field(default="es", pattern="^(es|en)$")
+    context: str | None = Field(default=None, max_length=2000)
 
     @field_validator("message", mode="before")
     @classmethod
     def trim_message(cls, value):
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("context", mode="before")
+    @classmethod
+    def trim_context(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
 
 
 def event(kind: str, **payload) -> str:
@@ -167,7 +176,7 @@ def gemini_error_message(error):
     return "Could not complete the Gemini response. Check the server connection and try again."
 
 
-async def run_agent_stream(user_message: str, lang: str = "es") -> AsyncIterator[str]:
+async def run_agent_stream(user_message: str, lang: str = "es", context: str | None = None) -> AsyncIterator[str]:
     yield event("status", content="Connecting to Gemini...")
     mcp_tools = []
     if MCP_ENABLED:
@@ -178,6 +187,10 @@ async def run_agent_stream(user_message: str, lang: str = "es") -> AsyncIterator
             return
 
     contents = [types.Content(role="user", parts=[types.Part(text=user_message)])]
+    if context:
+        contents.append(types.Content(role="user", parts=[types.Part(
+            text="Previous turn summary for continuity (adapt the new interface to it when relevant): " + context[:1500]
+        )]))
     lang_note = "Reply in Spanish." if lang == "es" else "Reply in English."
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT + "\n" + lang_note,
@@ -254,7 +267,7 @@ async def serve_index():
 async def generate_interface(body: GenerateRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY in the server .env file before generating.")
-    return StreamingResponse(run_agent_stream(body.message, body.lang), media_type="text/event-stream", headers={
+    return StreamingResponse(run_agent_stream(body.message, body.lang, body.context), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
 

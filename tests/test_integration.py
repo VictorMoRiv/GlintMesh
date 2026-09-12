@@ -1,5 +1,6 @@
 import json
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -110,6 +111,22 @@ class IntegrationTests(unittest.TestCase):
             events = self.generate(FakeClient([[chunk]]))
             self.assertEqual(events[-1]["type"], "error")
 
+    def test_context_is_optional_and_appends_to_history(self):
+        html = '```html\n<html><body>ok</body></html>\n```'
+        fake = FakeClient([[response(types.Part(text=html))]])
+        with patch.object(main.genai, "Client", return_value=fake):
+            result = self.client.post("/api/generate", json={"message": "Ajusta el dashboard", "context": "Previous: portfolio AAPL"})
+        self.assertEqual(result.status_code, 200)
+        history = fake.calls[0]["contents"]
+        self.assertEqual(len(history), 2)
+        self.assertEqual(history[0].parts[0].text, "Ajusta el dashboard")
+        self.assertIn("Previous: portfolio AAPL", history[1].parts[0].text)
+
+    def test_invalid_context(self):
+        self.assertEqual(self.client.post("/api/generate", json={"message": "Hi", "context": "x" * 2001}).status_code, 422)
+        result = self.client.post("/api/generate", json={"message": "Hi", "context": "   "})
+        self.assertEqual(result.status_code, 200)
+
     def test_mcp_failure_is_explicit(self):
         with patch.object(main, "MCP_ENABLED", True), patch.object(main.mcp_client, "list_tools", new_callable=AsyncMock, side_effect=RuntimeError("secret")):
             events = self.generate(FakeClient([]))
@@ -190,6 +207,45 @@ class MultiServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([s["name"] for s in body["servers"]], ["demo", "live"])
         self.assertEqual([(t["name"], t["server"]) for t in body["tools"]],
                          [("get_stock_quote", "demo"), ("get_live_quote", "live")])
+
+
+class FixtureSchemaTests(unittest.TestCase):
+    """Golden MCP payloads are the shared truth base: A2UI renders exactly these shapes."""
+
+    REQUIRED = {
+        "get_live_quote": {"symbol", "price", "change", "change_percent", "volume", "timestamp", "source"},
+        "get_live_history": {"symbol", "period_days", "data", "start_price", "end_price", "total_return", "source"},
+        "get_live_indices": {"SP500", "NASDAQ", "DOW", "IPC", "source"},
+        "get_live_fx": {"base", "timestamp", "rates", "source"},
+        "get_stock_quote": {"symbol", "price", "change", "change_percent", "volume", "timestamp"},
+        "get_portfolio_summary": {"total_market_value", "total_unrealized_gain", "positions"},
+        "get_market_indices": {"SP500", "NASDAQ", "DOW", "IPC"},
+        "get_historical_prices": {"symbol", "period_days", "data", "start_price", "end_price", "total_return"},
+        "get_financial_news": None,  # list of {title, sentiment, source}
+        "analyze_credit_risk": {"risk_score", "recommendation", "debt_to_income_ratio"},
+        "calculate_compound_interest": {"final_balance", "total_contributions", "yearly_breakdown"},
+        "get_forex_rates": {"base", "timestamp", "rates"},
+    }
+
+    def test_fixtures_match_a2ui_contract(self):
+        path = Path(__file__).resolve().parent / "fixtures" / "mcp_samples.json"
+        samples = json.loads(path.read_text(encoding="utf-8"))
+        for tool, required in self.REQUIRED.items():
+            with self.subTest(tool=tool):
+                self.assertIn(tool, samples)
+                payload = samples[tool]
+                if required is None:
+                    self.assertIsInstance(payload, list)
+                    self.assertTrue(payload)
+                    for item in payload:
+                        self.assertIn("title", item)
+                        self.assertIn("sentiment", item)
+                else:
+                    self.assertTrue(required <= set(payload), f"{tool} missing {required - set(payload)}")
+        live = samples["get_live_quote"]
+        self.assertEqual(live["source"], "live")
+        self.assertEqual(live["symbol"], "AAPL")
+        self.assertIsInstance(live["price"], (int, float))
 
 
 if __name__ == "__main__":
