@@ -1,5 +1,13 @@
 # FinFlow AI - Financial Interface Generator
 
+## Base de datos PyME
+
+El módulo [database/](database/README.md) contiene la conexión a MongoDB,
+el generador de datos de prueba para 10 colecciones y las instrucciones
+para configurar `finapp` y `EMPRESA_ID`. Incluye pruebas de generación
+sin conexión. Las herramientas Python de esta rama aún utilizan datos
+simulados; la integración con MongoDB está pendiente.
+
 ## Descripcion
 
 FinFlow AI es un agente de inteligencia artificial que genera interfaces web financieras en tiempo real. El usuario describe en lenguaje natural la interfaz que necesita (dashboard de portafolio, monitor de mercado, analizador de riesgo, etc.) y el agente utiliza herramientas MCP para obtener datos financieros reales y generar HTML/CSS/JS completo e interactivo.
