@@ -52,6 +52,7 @@ class GenerateRequest(BaseModel):
     lang: str = Field(default="es", pattern="^(es|en)$")
     context: str | None = Field(default=None, max_length=2000)
     dataset_id: str | None = Field(default=None, max_length=60)
+    style_prompt: str | None = Field(default=None, max_length=1000)
 
     @field_validator("message", mode="before")
     @classmethod
@@ -61,6 +62,14 @@ class GenerateRequest(BaseModel):
     @field_validator("context", mode="before")
     @classmethod
     def trim_context(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    @field_validator("style_prompt", mode="before")
+    @classmethod
+    def trim_style(cls, value):
         if isinstance(value, str):
             value = value.strip()
             return value or None
@@ -268,7 +277,7 @@ def gemini_error_message(error):
 
 
 async def run_agent_stream(user_message: str, lang: str = "es", context: str | None = None,
-                     dataset_text: str | None = None) -> AsyncIterator[str]:
+                     dataset_text: str | None = None, style_prompt: str | None = None) -> AsyncIterator[str]:
     yield event("status", content="Connecting to Gemini...")
     mcp_tools = []
     if MCP_ENABLED:
@@ -286,8 +295,12 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
     if dataset_text:
         contents.append(types.Content(role="user", parts=[types.Part(text=dataset_text)]))
     lang_note = "Reply in Spanish." if lang == "es" else "Reply in English."
+    system_instruction = SYSTEM_PROMPT + "\n" + lang_note
+    if style_prompt:
+        system_instruction += ("\nUser style preference for all generated interfaces "
+                               "(takes precedence over the default visual style): " + style_prompt[:800])
     config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT + "\n" + lang_note,
+        system_instruction=system_instruction,
         tools=build_gemini_tools(mcp_tools) or None,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         temperature=0.7,
@@ -370,7 +383,7 @@ async def generate_interface(body: GenerateRequest):
     if not GEMINI_API_KEYS:
         raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY in the server .env file before generating.")
     dataset_text = load_dataset_context(body.dataset_id) if body.dataset_id else None
-    return StreamingResponse(run_agent_stream(body.message, body.lang, body.context, dataset_text), media_type="text/event-stream", headers={
+    return StreamingResponse(run_agent_stream(body.message, body.lang, body.context, dataset_text, body.style_prompt), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
 

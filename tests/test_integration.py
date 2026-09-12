@@ -141,6 +141,15 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn("status", [e["type"] for e in events])
         self.assertEqual(events[-1]["type"], "done")
 
+    def test_style_prompt_reaches_system_instruction(self):
+        fake = FakeClient([[response(types.Part(text="ok"))]])
+        with patch.object(main.genai, "Client", return_value=fake):
+            result = self.client.post("/api/generate", json={"message": "Hi", "style_prompt": "Dark neon style"})
+        self.assertEqual(result.status_code, 200)
+        config = fake.calls[0]["config"]
+        self.assertIn("Dark neon style", config.system_instruction)
+        self.assertEqual(self.client.post("/api/generate", json={"message": "Hi", "style_prompt": "x" * 1001}).status_code, 422)
+
     def test_mcp_failure_is_explicit(self):
         with patch.object(main, "MCP_ENABLED", True), patch.object(main.mcp_client, "list_tools", new_callable=AsyncMock, side_effect=RuntimeError("secret")):
             events = self.generate(FakeClient([]))

@@ -277,6 +277,10 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         <i class="bi bi-database"></i>
         <span data-i18n="data">Data</span>
       </button>
+      <button class="btn-glass" id="btn-settings" title="Generation settings" style="position:relative;">
+        <i class="bi bi-gear"></i>
+        <span id="settings-dot" style="display:none; position:absolute; top:4px; right:4px; width:7px; height:7px; border-radius:50%; background:#34d399;"></span>
+      </button>
       <button class="btn-glass" id="btn-clear" title="Clear current session">
         <i class="bi bi-arrow-counterclockwise"></i>
         <span data-i18n="clear">Clear</span>
@@ -453,6 +457,29 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
     <button class="btn-glass" id="btn-upload"><i class="bi bi-upload"></i> <span data-i18n="upload">Upload</span></button>
   </div>
   <div id="data-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+</div>
+
+<!-- Settings modal -->
+<div id="settings-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
+<div id="settings-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(520px,94vw); max-height:84vh; overflow-y:auto; background:rgba(10,15,40,0.95); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-gear" style="color:#34d399;"></i> <span data-i18n="style_title">Interface style</span></h5>
+    <button class="btn-glass" id="btn-close-settings" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="style_sub">Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).</p>
+  <div id="style-presets" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+    <button class="btn-glass btn-sm" data-preset="minimalist"><span data-i18n="s_min">Minimalist enterprise</span></button>
+    <button class="btn-glass btn-sm" data-preset="neon"><span data-i18n="s_neon">Dark neon</span></button>
+    <button class="btn-glass btn-sm" data-preset="playful"><span data-i18n="s_play">Playful</span></button>
+    <button class="btn-glass btn-sm" data-preset="corporate"><span data-i18n="s_corp">Classic corporate</span></button>
+  </div>
+  <textarea id="style-textarea" rows="4" maxlength="1000" data-i18n-ph="style_ph" placeholder="E.g.: dark mode with green accents and big numbers..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
+  <div style="display:flex; align-items:center; gap:8px; margin-top:10px;">
+    <span id="style-count" style="font-size:11px; color:var(--text-muted);">0 / 1000</span>
+    <span style="flex:1;"></span>
+    <button class="btn-glass" id="btn-style-reset"><span data-i18n="reset_default">Reset</span></button>
+    <button class="btn-glass" id="btn-style-save" style="border-color:rgba(52,211,153,0.4); color:#34d399;"><i class="bi bi-check"></i> <span data-i18n="save">Save</span></button>
+  </div>
 </div>
 
 <div id="toast-container"></div>

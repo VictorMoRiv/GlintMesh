@@ -19,6 +19,9 @@ const I18N = {
     data: 'Datos', datasets_title: 'Mis datasets', datasets_sub: 'Sube CSV o JSON (máx 2 MB). El agente construye la interfaz con tus datos.',
     upload: 'Subir', use: 'Usar', using: 'Usando', no_datasets: 'Aún no hay datasets. Sube tu primer CSV o JSON.',
     uploaded_ok: 'Dataset cargado', upload_fail: 'No se pudo cargar el dataset', rows: 'filas',
+    settings: 'Configuración', style_title: 'Estilo de interfaces', style_sub: 'Describe cómo quieres que se vean todas tus interfaces. Vacío = minimalista empresarial (default).',
+    style_ph: 'Ej.: modo oscuro con acentos verdes y números grandes...', save: 'Guardar', reset_default: 'Restablecer',
+    s_min: 'Minimalista empresarial', s_neon: 'Neón oscuro', s_play: 'Juguetón', s_corp: 'Corporativo clásico', style_saved: 'Estilo guardado',
     session_cleared: 'Sesión limpiada', no_export: 'Aún no hay interfaz para exportar', exported: 'Interfaz exportada',
     copied: 'Código copiado', mcp_disabled: 'MCP desactivado. Gemini funciona sin herramientas.', mcp_error: 'No se pudieron obtener herramientas',
     waiting: 'Esperando a Gemini...', generating: 'Generando interfaz...', analyzing: 'Analizando solicitud...',
@@ -41,6 +44,9 @@ const I18N = {
     data: 'Data', datasets_title: 'My datasets', datasets_sub: 'Upload CSV or JSON (max 2 MB). The agent builds the interface from your data.',
     upload: 'Upload', use: 'Use', using: 'Using', no_datasets: 'No datasets yet. Upload your first CSV or JSON.',
     uploaded_ok: 'Dataset uploaded', upload_fail: 'Could not upload dataset', rows: 'rows',
+    settings: 'Settings', style_title: 'Interface style', style_sub: 'Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).',
+    style_ph: 'E.g.: dark mode with green accents and big numbers...', save: 'Save', reset_default: 'Reset',
+    s_min: 'Minimalist enterprise', s_neon: 'Dark neon', s_play: 'Playful', s_corp: 'Classic corporate', style_saved: 'Style saved',
     session_cleared: 'Session cleared', no_export: 'No interface to export yet', exported: 'Interface exported',
     copied: 'Code copied to clipboard', mcp_disabled: 'MCP is disabled. Gemini works without tools.', mcp_error: 'Could not fetch tools',
     waiting: 'Waiting for Gemini...', generating: 'Generating interface...', analyzing: 'Analyzing request...',
@@ -178,6 +184,67 @@ async function loadTools() {
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+// ─── Generation settings (interface style prompt) ───────────────────────────
+const STYLE_KEY = 'glintmesh-style-v1';
+const STYLE_PRESETS = {
+  minimalist: '',
+  neon: 'Dark neon terminal style: deep dark background, cyan and magenta glows, glassmorphism cards, futuristic trading-desk look, still readable numbers.',
+  playful: 'Playful modern style: light background, vibrant accent colors, rounded shapes and friendly headings, while keeping financial numbers clear and professional.',
+  corporate: 'Classic corporate banking style: white background, navy blue headers, conservative tables, dense and formal, maximum readability.',
+};
+let stylePrompt = '', stylePreset = 'minimalist';
+try {
+  const saved = JSON.parse(localStorage.getItem(STYLE_KEY) || 'null');
+  if (saved) { stylePrompt = saved.prompt || ''; stylePreset = saved.preset || 'minimalist'; }
+} catch (e) {}
+function refreshSettingsDot() {
+  $('settings-dot').style.display = stylePrompt ? 'block' : 'none';
+}
+function openSettings() {
+  const ta = $('style-textarea');
+  ta.value = stylePrompt;
+  $('style-count').textContent = ta.value.length + ' / 1000';
+  document.querySelectorAll('#style-presets [data-preset]').forEach((b) => {
+    const on = b.dataset.preset === stylePreset && (b.dataset.preset === 'minimalist' ? !stylePrompt : true);
+    b.style.borderColor = on ? 'rgba(52,211,153,0.5)' : '';
+  });
+  $('settings-modal').style.display = 'block';
+  $('settings-overlay').style.display = 'block';
+}
+function closeSettings() { $('settings-modal').style.display = 'none'; $('settings-overlay').style.display = 'none'; }
+$('btn-settings').addEventListener('click', openSettings);
+$('btn-close-settings').addEventListener('click', closeSettings);
+$('settings-overlay').addEventListener('click', closeSettings);
+document.querySelectorAll('#style-presets [data-preset]').forEach((b) => b.addEventListener('click', () => {
+  stylePreset = b.dataset.preset;
+  $('style-textarea').value = STYLE_PRESETS[stylePreset];
+  $('style-count').textContent = $('style-textarea').value.length + ' / 1000';
+  openSettingsRefresh();
+}));
+function openSettingsRefresh() {
+  document.querySelectorAll('#style-presets [data-preset]').forEach((x) => { x.style.borderColor = x.dataset.preset === stylePreset ? 'rgba(52,211,153,0.5)' : ''; });
+}
+$('style-textarea').addEventListener('input', (e) => {
+  $('style-count').textContent = e.target.value.length + ' / 1000';
+  if (e.target.value !== (STYLE_PRESETS[stylePreset] || '')) stylePreset = 'custom';
+  openSettingsRefresh();
+});
+$('btn-style-save').addEventListener('click', () => {
+  stylePrompt = $('style-textarea').value.trim().slice(0, 1000);
+  if (!stylePrompt) stylePreset = 'minimalist';
+  try { localStorage.setItem(STYLE_KEY, JSON.stringify({ prompt: stylePrompt, preset: stylePreset })); } catch (e) {}
+  refreshSettingsDot();
+  closeSettings();
+  showToast(t('style_saved'), 'success');
+});
+$('btn-style-reset').addEventListener('click', () => {
+  stylePrompt = ''; stylePreset = 'minimalist';
+  try { localStorage.removeItem(STYLE_KEY); } catch (e) {}
+  refreshSettingsDot();
+  closeSettings();
+});
+refreshSettingsDot();
+
 // ─── User datasets ──────────────────────────────────────────────────────────
 let activeDataset = null;
 const dataModal = $('data-modal'), dataOverlay = $('data-overlay');
@@ -282,6 +349,7 @@ async function handleSubmit() {
     const payload = { message, lang };
     if (state.lastSummary) payload.context = state.lastSummary.slice(0, 800);
     if (activeDataset) payload.dataset_id = activeDataset.id;
+    if (stylePrompt) payload.style_prompt = stylePrompt.slice(0, 1000);
     const response = await fetch('/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: controller.signal,
