@@ -33,7 +33,11 @@ const I18N = {
     reset_look: 'Restablecer apariencia', snip_blue: 'Header azul', snip_round: 'Todo redondeado', snip_compact: 'Compacto',
     del_all: 'Borrar todo', keep_imp: 'Conservar importantes', del_everything: 'Borrar todo', cancel: 'Cancelar',
     wipe_title: '¿Borrar datos guardados?', wipe_will_delete: 'Se borrará:', w_session: 'sesión', w_datasets: 'datasets', w_prefs: 'preferencias',
-    imp_tag: 'importante', wiped_ok: 'Datos eliminados',
+    imp_tag: 'importante', wiped_ok: 'Datos eliminados', retry: 'Reintentar',
+    dashboard: 'Dashboard', dash_empty: 'Fija superficies A2UI para componer tu dashboard', pinned_ok: 'Fijado al dashboard',
+    alerts: 'Alertas de precio', alerts_sub: 'Se revisan contra precios live cada 60s.', alert_symbol: 'Símbolo', above: 'Arriba de', below: 'Debajo de',
+    alert_price: 'Precio', no_alerts: 'Sin alertas. Crea la primera arriba.', alert_added: 'Alerta creada', alert_bad: 'Símbolo y precio válidos por favor',
+    alert_fired: 'Alerta activada',
     session_cleared: 'Sesión limpiada', no_export: 'Aún no hay interfaz para exportar', exported: 'Interfaz exportada',
     copied: 'Código copiado', mcp_disabled: 'MCP desactivado. Gemini funciona sin herramientas.', mcp_error: 'No se pudieron obtener herramientas',
     waiting: 'Esperando a Gemini...', generating: 'Generando interfaz...', analyzing: 'Analizando solicitud...',
@@ -70,7 +74,11 @@ const I18N = {
     reset_look: 'Reset look', snip_blue: 'Blue header', snip_round: 'All rounded', snip_compact: 'Compact',
     del_all: 'Delete all', keep_imp: 'Keep important', del_everything: 'Delete everything', cancel: 'Cancel',
     wipe_title: 'Delete saved data?', wipe_will_delete: 'Will delete:', w_session: 'session', w_datasets: 'datasets', w_prefs: 'preferences',
-    imp_tag: 'important', wiped_ok: 'Data deleted',
+    imp_tag: 'important', wiped_ok: 'Data deleted', retry: 'Retry',
+    dashboard: 'Dashboard', dash_empty: 'Pin A2UI surfaces to compose your dashboard', pinned_ok: 'Pinned to dashboard',
+    alerts: 'Price alerts', alerts_sub: 'Checked against live prices every 60s.', alert_symbol: 'Symbol', above: 'Above', below: 'Below',
+    alert_price: 'Price', no_alerts: 'No alerts yet. Create the first one above.', alert_added: 'Alert created', alert_bad: 'Valid symbol and price please',
+    alert_fired: 'Alert triggered',
     session_cleared: 'Session cleared', no_export: 'No interface to export yet', exported: 'Interface exported',
     copied: 'Code copied to clipboard', mcp_disabled: 'MCP is disabled. Gemini works without tools.', mcp_error: 'Could not fetch tools',
     waiting: 'Waiting for Gemini...', generating: 'Generating interface...', analyzing: 'Analyzing request...',
@@ -128,7 +136,8 @@ chatTextarea.addEventListener('input', () => {
 chatTextarea.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
 });
-sendBtn.addEventListener('click', handleSubmit);
+sendBtn.addEventListener('click', () => handleSubmit());
+$('btn-retry').addEventListener('click', () => { if (state.lastMessage) handleSubmit(state.lastMessage); });
 $('lang-es').addEventListener('click', () => { applyLang('es'); refreshConfigLabels(); });
 $('lang-en').addEventListener('click', () => { applyLang('en'); refreshConfigLabels(); });
 
@@ -143,7 +152,7 @@ document.querySelectorAll('.suggestion-chip').forEach((chip) => {
 
 $('btn-clear').addEventListener('click', () => {
   state.controller?.abort(); state.controller = null; state.isGenerating = false; state.a2ui = [];
-  destroyA2UICharts();
+  destroyA2UICharts(); state.pinned = []; renderDashboard();
   sendBtn.disabled = false; progressBar.style.display = 'none'; previewIframe.srcdoc = '';
   state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.lastSummary = '';
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
@@ -262,6 +271,7 @@ function syncSettingsUI() {
 function openSettings() {
   syncSettingsUI();
   refreshSettingsDatasets();
+  refreshAlerts();
   $('settings-modal').style.display = 'block';
   $('settings-overlay').style.display = 'block';
 }
@@ -407,6 +417,49 @@ async function wipeAll(keepImportant) {
 }
 $('btn-wipe-keep').addEventListener('click', () => wipeAll(true));
 $('btn-wipe-all2').addEventListener('click', () => wipeAll(false));
+
+// ─── Price alerts ─────────────────────────────────────────────────────────────
+const seenAlerts = new Set();
+async function refreshAlerts() {
+  const box = $('alerts-list');
+  try {
+    const res = await fetch('/api/alerts');
+    const items = ((await res.json()).alerts || []);
+    if (!items.length) { box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">' + t('no_alerts') + '</div>'; return; }
+    box.innerHTML = '';
+    items.forEach((a) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary);';
+      const state = a.triggered ? '<span class="a2ui-sent pos">' + t('alert_fired') + '</span>' : '<span class="a2ui-mlabel">' + escapeHtml(a.op) + ' ' + escapeHtml(a.price) + '</span>';
+      row.innerHTML = '<i class="bi bi-bell" style="color:' + (a.triggered ? '#34d399' : 'var(--text-muted)') + ';"></i><strong>' + escapeHtml(a.symbol) + '</strong>' + state + '<button class="btn-glass btn-sm" style="margin-left:auto;"></button>';
+      const btn = row.querySelector('button');
+      btn.textContent = t('delete');
+      btn.addEventListener('click', async () => {
+        await fetch('/api/alerts/' + encodeURIComponent(a.id), { method: 'DELETE' });
+        refreshAlerts();
+      });
+      box.appendChild(row);
+      if (a.triggered && !seenAlerts.has(a.id)) {
+        seenAlerts.add(a.id);
+        showToast(t('alert_fired') + ': ' + a.symbol + ' ' + a.op + ' ' + a.price, 'success');
+      }
+    });
+  } catch (e) {}
+}
+$('btn-alert-add').addEventListener('click', async () => {
+  const symbol = $('alert-symbol').value.trim().toUpperCase();
+  const price = Number($('alert-price').value);
+  if (!symbol || !(price > 0)) { showToast(t('alert_bad'), 'error'); return; }
+  const res = await fetch('/api/alerts', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol, op: $('alert-op').value === 'below' ? 'below' : 'above', price }),
+  });
+  if (!res.ok) { showToast(t('alert_bad'), 'error'); return; }
+  $('alert-symbol').value = ''; $('alert-price').value = '';
+  refreshAlerts();
+  showToast(t('alert_added'), 'success');
+});
+setInterval(refreshAlerts, 60000);
 refreshSettingsDot();
 
 // ─── App appearance: theme + custom CSS (app shell only) ────────────────────
@@ -672,6 +725,16 @@ async function drillPortfolio(name) {
   }
 }
 a2uiFeed.addEventListener('click', (e) => {
+  const pin = e.target.closest('[data-pin]');
+  if (pin) {
+    const card = pin.closest('.a2ui-card');
+    if (card && card._a2ui && card._a2ui.data) {
+      state.pinned.push({ tool: card._a2ui.tool, data: card._a2ui.data });
+      renderDashboard();
+      showToast(t('pinned_ok'), 'success');
+    }
+    return;
+  }
   const sym = e.target.closest('[data-drill-symbol]');
   if (sym) { e.preventDefault(); drillSymbol(sym.dataset.drillSymbol); return; }
   const pf = e.target.closest('[data-drill-portfolio]');
@@ -679,16 +742,24 @@ a2uiFeed.addEventListener('click', (e) => {
   const th = e.target.closest('th');
   if (th && th.closest('table.a2ui-sortable')) sortA2UITable(th);
 });
+$('dashboard-grid').addEventListener('click', (e) => {
+  const un = e.target.closest('[data-unpin]');
+  if (!un) return;
+  state.pinned.splice(Number(un.dataset.unpin), 1);
+  renderDashboard();
+});
 
 // ─── Submit ─────────────────────────────────────────────────────────────────
-async function handleSubmit() {
-  const message = chatTextarea.value.trim();
+async function handleSubmit(override) {
+  const message = (typeof override === 'string' ? override : chatTextarea.value).trim();
   if (!message || state.isGenerating) return;
   if (message.length > 500) return;
+  state.lastMessage = message;
+  $('btn-retry').style.display = 'none';
   const controller = new AbortController();
   state.controller = controller; state.isGenerating = true;
   state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.a2ui = [];
-  destroyA2UICharts();
+  destroyA2UICharts('feed');
   chatTextarea.value = ''; chatTextarea.style.height = 'auto'; charCount.textContent = '0 / 500';
   sendBtn.disabled = true; progressBar.style.display = 'flex';
   welcomeState.style.display = 'none'; generatedWrapper.classList.add('visible');
@@ -730,6 +801,7 @@ async function handleSubmit() {
   } catch (error) {
     if (!controller.signal.aborted) {
       setStatus(t('failed'), 'error'); agentBubbleText.textContent = error.message; showToast(error.message, 'error');
+      $('btn-retry').style.display = 'inline-flex';
       if (!chatTextarea.value) { chatTextarea.value = message; chatTextarea.dispatchEvent(new Event('input')); }
     }
   } finally {
@@ -755,9 +827,11 @@ function deltaBadge(pct) {
   const up = !(n < 0);
   return '<span class="a2ui-delta ' + (up ? 'up' : 'down') + '">' + (up ? '▲' : '▼') + ' ' + esc(Math.abs(Number.isFinite(n) ? n : 0).toFixed(2)) + '%</span>';
 }
-function destroyA2UICharts() {
-  (state.charts || []).forEach((c) => { try { c.destroy(); } catch (e) {} });
-  state.charts = [];
+function destroyA2UICharts(scope) {
+  state.charts = (state.charts || []).filter((entry) => {
+    if (!scope || entry.scope === scope) { try { entry.c.destroy(); } catch (e) {} return false; }
+    return true;
+  });
 }
 
 function a2uiKind(tool) {
@@ -878,7 +952,7 @@ function renderA2UIBody(tool, data, cid) {
   }
 }
 
-function mountA2UIChart(tool, data, cid) {
+function mountA2UIChart(tool, data, cid, scope) {
   if (!window.Chart) return;
   try {
     Chart.defaults.color = '#8a94a8';
@@ -896,7 +970,7 @@ function mountA2UIChart(tool, data, cid) {
       const yrs = data.yearly_breakdown || [];
       cfg = { type: 'line', data: { labels: yrs.map((y) => 'Y' + y.year), datasets: [{ label: 'Balance', data: yrs.map((y) => y.balance), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3 }, { label: 'Contributions', data: yrs.map((y) => y.contributions), borderColor: '#64748b', borderDash: [5, 4], fill: false, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { labels: { boxWidth: 12 } }, zoom: zoomOpts }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } } };
     }
-    if (cfg) state.charts.push(new Chart(el, cfg));
+    if (cfg) state.charts.push({ c: new Chart(el, cfg), scope: scope || 'feed' });
   } catch (e) {}
 }
 
@@ -972,6 +1046,9 @@ function fillA2UICard(card, tool, data, failed) {
   card.querySelector('.a2ui-head').insertAdjacentHTML('beforeend',
     live ? '<span class="proto-badge live">LIVE</span>'
       : (src === 'user' ? '<span class="proto-badge user">USER</span>' : '<span class="proto-badge mcp">SIM</span>'));
+  card.querySelector('.a2ui-head').insertAdjacentHTML('beforeend',
+    '<button class="btn-preview-action" data-pin="1" title="pin" style="margin-left:auto;"><i class="bi bi-pin-angle"></i></button>');
+  card._a2ui = { tool, data: data || null };
   mountA2UIChart(tool, data, card.dataset.cid);
 }
 function updateA2UICard(tool, data, failed) {
@@ -983,6 +1060,35 @@ function updateA2UICard(tool, data, failed) {
       return;
     }
   }
+}
+
+// ─── Composed dashboard (pin A2UI surfaces) ─────────────────────────────────
+state.pinned = [];
+function refreshDashBadge() {
+  const b = $('dash-badge');
+  if (!b) return;
+  b.style.display = state.pinned.length ? 'inline-flex' : 'none';
+  b.textContent = state.pinned.length;
+}
+function renderDashboard() {
+  const grid = $('dashboard-grid');
+  const empty = $('dash-empty');
+  grid.innerHTML = '';
+  destroyA2UICharts('dash');
+  if (!state.pinned.length) { if (empty) empty.style.display = 'block'; refreshDashBadge(); return; }
+  if (empty) empty.style.display = 'none';
+  state.pinned.forEach((p, i) => {
+    const cid = 'dash-chart-' + Date.now() + '-' + i;
+    const card = document.createElement('div');
+    card.className = 'a2ui-card';
+    card.innerHTML = '<div class="a2ui-head"><span class="proto-badge">A2UI</span><span></span>'
+      + '<button class="btn-preview-action" data-unpin="' + i + '" title="unpin" style="margin-left:auto;"><i class="bi bi-pin-angle-fill"></i></button></div>'
+      + '<div class="a2ui-body">' + renderA2UIBody(p.tool, p.data, cid) + '</div>';
+    card.querySelector('.a2ui-head span:nth-child(2)').textContent = p.tool;
+    grid.appendChild(card);
+    mountA2UIChart(p.tool, p.data, cid, 'dash');
+  });
+  refreshDashBadge();
 }
 
 function finalize(fullText) {
@@ -1003,6 +1109,7 @@ function finalize(fullText) {
     catch (e) { codeOutput.textContent = state.generatedHTML; }
   }
   setStatus(state.generatedHTML ? t('done_ok') : t('resp_ok'), 'success');
+  $('btn-retry').style.display = 'none';
   progressBar.style.display = 'none';
   if (genMode === 'data') {
     const a2uiTab = document.querySelector('.tab-btn[data-tab="a2ui"]');

@@ -450,6 +450,90 @@ class ShareRequest(BaseModel):
     html: str = Field(min_length=100, max_length=500000)
 
 
+ALERTS_FILE = BASE_DIR / "alerts.json"
+
+
+def _load_alerts() -> list:
+    try:
+        data = json.loads(ALERTS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _save_alerts(alerts: list) -> None:
+    ALERTS_FILE.write_text(json.dumps(alerts, ensure_ascii=False), encoding="utf-8")
+
+
+class AlertRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12, pattern=r"^[A-Za-z0-9.^=-]+$")
+    op: str = Field(pattern="^(above|below)$")
+    price: float = Field(gt=0)
+
+
+async def _check_alerts_once() -> list:
+    """Evaluate untriggered alerts against live prices; returns newly triggered."""
+    import mcp_yahoo
+
+    alerts = _load_alerts()
+    fired = []
+    for alert in alerts:
+        if alert.get("triggered"):
+            continue
+        try:
+            quote = json.loads(mcp_yahoo.get_live_quote(alert["symbol"]))
+            current = float(quote["price"])
+        except Exception:
+            continue
+        alert["last_price"] = current
+        hit = current >= alert["price"] if alert["op"] == "above" else current <= alert["price"]
+        if hit:
+            alert["triggered"] = True
+            alert["triggered_at"] = quote.get("timestamp", "")
+            fired.append(alert)
+    _save_alerts(alerts)
+    return fired
+
+
+async def _alerts_loop() -> None:
+    while True:
+        try:
+            await _check_alerts_once()
+        except Exception:
+            pass
+        await asyncio.sleep(60)
+
+
+@app.on_event("startup")
+async def _start_alerts_checker() -> None:
+    asyncio.create_task(_alerts_loop())
+
+
+@app.get("/api/alerts")
+async def list_alerts():
+    return {"alerts": _load_alerts()}
+
+
+@app.post("/api/alerts")
+async def create_alert(body: AlertRequest):
+    alerts = _load_alerts()
+    alert = {"id": uuid.uuid4().hex[:8], "symbol": body.symbol.upper(), "op": body.op,
+             "price": body.price, "triggered": False, "last_price": None}
+    alerts.append(alert)
+    _save_alerts(alerts)
+    return alert
+
+
+@app.delete("/api/alerts/{alert_id}")
+async def delete_alert(alert_id: str):
+    alerts = _load_alerts()
+    kept = [a for a in alerts if a.get("id") != alert_id]
+    if len(kept) == len(alerts):
+        raise HTTPException(status_code=404, detail="Alert not found.")
+    _save_alerts(kept)
+    return {"deleted": alert_id}
+
+
 @app.post("/api/tool-call")
 async def direct_tool_call(body: ToolCallRequest, simulate: bool = False):
     """Re-run a single MCP tool without Gemini (free live refresh for A2UI surfaces)."""

@@ -1,6 +1,19 @@
-# GlintMesh
+# GlintMesh — Agente financiero con MCP y A2UI nativo
 
-Generador de interfaces financieras con una UI web, FastAPI y Gemini. El usuario escribe en la interfaz y recibe la respuesta progresivamente. Las solicitudes de dashboards generan HTML que se muestra en Preview, Code y Export; los saludos reciben una respuesta de texto.
+**Problema:** pedirle dashboards a una IA devuelve texto o código que no puedes usar: o ejecuta código arbitrario, o trae datos inventados.
+**Solución:** un agente que interpreta tu pedido, ejecuta herramientas MCP reales (Yahoo Finance, BCE, tus portafolios, tus CSVs) y renderiza superficies A2UI **nativas y tipadas** sin ejecutar código del modelo. Cada dato lleva badge de procedencia: LIVE, USER o SIM (solo en modo simulación explícito).
+
+Flujo: Usuario → Agente (Gemini) → MCP (4 servidores, 17 tools) → A2UI nativo → Componentes (quote, tablas ordenables, gráficas con zoom, gauges, feed).
+
+## Demo en vivo (3 minutos)
+
+Ver `DEMO.md` para el guion completo. Resumen:
+
+1. **Min 0:00** — Pide “cotización de AAPL”: el agente llama `get_live_quote` + `get_live_history`; la tab A2UI muestra tarjeta + gráfica con badge LIVE.
+2. **Min 1:00** — Fija 2 superficies (pin) y abre la tab Dashboard: composición multi-tool.
+3. **Min 1:40** — Sube tu CSV en Data, úsalo y pide “grafica mis ventas”: interfaz con tus datos.
+4. **Min 2:20** — Crea una alerta (AAPL debajo de 300) y muestra el checker; cambia el estilo desde Configuración.
+5. **Min 2:50** — Cierre: sin cuota gastada en refresh (botón Refresh), export/share del HTML.
 
 ## Ejecutar en Windows (PowerShell)
 

@@ -392,5 +392,30 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(self.client.delete("/api/datasets/../main").status_code, 404)
 
 
+class AlertTests(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(main.app)
+        main.ALERTS_FILE.unlink(missing_ok=True)
+
+    def tearDown(self):
+        main.ALERTS_FILE.unlink(missing_ok=True)
+
+    def test_crud_and_checker(self):
+        self.assertEqual(self.client.get("/api/alerts").json(), {"alerts": []})
+        created = self.client.post("/api/alerts", json={"symbol": "AAPL", "op": "above", "price": 1}).json()
+        self.assertFalse(created["triggered"])
+        self.assertEqual(self.client.post("/api/alerts", json={"symbol": "AAPL", "op": "sideways", "price": 1}).status_code, 422)
+        self.assertEqual(self.client.post("/api/alerts", json={"symbol": "AAPL", "op": "above", "price": -5}).status_code, 422)
+        with patch("mcp_yahoo.get_live_quote", return_value='{"symbol": "AAPL", "price": 500, "timestamp": "t"}'):
+            import asyncio as _asyncio
+            fired = _asyncio.run(main._check_alerts_once())
+        self.assertEqual([a["symbol"] for a in fired], ["AAPL"])
+        listed = self.client.get("/api/alerts").json()["alerts"]
+        self.assertTrue(listed[0]["triggered"])
+        self.assertEqual(listed[0]["last_price"], 500)
+        self.assertEqual(self.client.delete(f"/api/alerts/{created['id']}").status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/alerts/{created['id']}").status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()
