@@ -213,10 +213,23 @@
 <div id="app-shell">
 
   <header id="header">
-    <div class="logo-mark">G</div>
+    <div class="logo-mark">
+      <svg viewBox="0 0 38 38" width="22" height="22" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="gmG" x1="0" y1="0" x2="38" y2="38" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#059669"/><stop offset="1" stop-color="#34d399"/>
+          </linearGradient>
+        </defs>
+        <rect x="1" y="1" width="36" height="36" rx="10" fill="url(#gmG)"/>
+        <path d="M12 12 L26 10 L27 25 L10 26 Z M12 12 L27 25 M26 10 L10 26" stroke="rgba(255,255,255,.55)" stroke-width="1.6"/>
+        <circle cx="12" cy="12" r="2.6" fill="#fff"/>
+        <circle cx="26" cy="10" r="2" fill="#fff" opacity=".85"/>
+        <circle cx="27" cy="25" r="2.6" fill="#fff"/>
+        <circle cx="10" cy="26" r="2" fill="#fff" opacity=".85"/>
+      </svg>
+    </div>
     <div>
       <div class="logo-text">GlintMesh</div>
-      <div class="logo-sub" data-i18n="subtitle">A2UI over MCP Interface Mesh</div>
     </div>
     <div class="version-pill ms-2" title="A2UI over MCP">
       <i class="bi bi-grid-1x2-fill"></i>
