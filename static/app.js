@@ -6,7 +6,7 @@ const I18N = {
     subtitle: 'A2UI over MCP Interface Mesh', tools: 'Tools', clear: 'Limpiar', export: 'Exportar',
     preview: 'Vista previa', a2ui: 'Superficie A2UI', code: 'Código', agent_status: 'Estado del agente',
     ready: 'Listo para generar interfaces', tool_empty: 'Las llamadas MCP aparecerán aquí mientras trabaja el agente',
-    quick_prompts: 'Prompts rápidos', p1: 'Dashboard de portafolio', p2: 'Monitor de índices', p3: 'Analizador de riesgo',
+    quick_prompts: 'Prompts rápidos', add_prompt: 'Nuevo prompt rápido', edit_prompt: 'Editar prompt', prompt_need: 'Escribe al menos un texto (ES o EN)', p1: 'Dashboard de portafolio', p2: 'Monitor de índices', p3: 'Analizador de riesgo',
     p4: 'Calculadora de inversión', p5: 'Tablero forex', p6: 'Noticias financieras',
     welcome_desc: 'Describe cualquier dashboard financiero en lenguaje natural. GlintMesh obtiene datos MCP y los renderiza como superficies A2UI en segundos.',
     f1t: 'Datos de mercado', f1d: 'Cotizaciones, índices e historial en tiempo real', f2d: 'Superficies UI tipadas vía MCP',
@@ -21,7 +21,7 @@ const I18N = {
     uploaded_ok: 'Dataset cargado', upload_fail: 'No se pudo cargar el dataset', rows: 'filas',
     refresh_data: 'Actualizar datos', auto_60: 'Auto 60s', refreshed_ok: 'Datos actualizados sin gastar cuota', refresh_fail: 'No se pudo actualizar',
     link_copied: 'Link copiado al portapapeles', share_fail: 'No se pudo crear el link',
-    settings: 'Configuración', style_title: 'Estilo de interfaces', style_sub: 'Describe cómo quieres que se vean todas tus interfaces. Vacío = minimalista empresarial (default).',
+    settings: 'Configuración', options_menu: 'Opciones', style_title: 'Estilo de interfaces', style_sub: 'Describe cómo quieres que se vean todas tus interfaces. Vacío = minimalista empresarial (default).',
     style_ph: 'Ej.: modo oscuro con acentos verdes y números grandes...', save: 'Guardar', reset_default: 'Restablecer',
     s_min: 'Minimalista empresarial', s_glass: 'Glassmorphism', s_dark: 'Oscuro simple', s_corp: 'Corporativo clásico', s_custom: 'Personalizado', style_saved: 'Estilo guardado',
     model_label: 'Modelo', creativity: 'Creatividad', mode_label: 'Modo', mode_full: 'Interfaz completa', mode_data: 'Solo datos',
@@ -42,7 +42,7 @@ const I18N = {
     subtitle: 'A2UI over MCP Interface Mesh', tools: 'Tools', clear: 'Clear', export: 'Export',
     preview: 'Preview', a2ui: 'A2UI Surface', code: 'Code', agent_status: 'Agent Status',
     ready: 'Ready to generate interfaces', tool_empty: 'MCP tool calls will appear here as the agent works',
-    quick_prompts: 'Quick Prompts', p1: 'Portfolio dashboard', p2: 'Market indices monitor', p3: 'Credit risk analyzer',
+    quick_prompts: 'Quick Prompts', add_prompt: 'New quick prompt', edit_prompt: 'Edit prompt', prompt_need: 'Type at least one text (ES or EN)', p1: 'Portfolio dashboard', p2: 'Market indices monitor', p3: 'Credit risk analyzer',
     p4: 'Investment calculator', p5: 'Forex rates board', p6: 'Financial news feed',
     welcome_desc: 'Describe any financial dashboard in plain language. GlintMesh fetches MCP data and renders it as A2UI surfaces in seconds.',
     f1t: 'Live Market Data', f1d: 'Real-time quotes, indices, and price history', f2d: 'Typed UI surfaces streamed over MCP',
@@ -57,7 +57,7 @@ const I18N = {
     uploaded_ok: 'Dataset uploaded', upload_fail: 'Could not upload dataset', rows: 'rows',
     refresh_data: 'Refresh data', auto_60: 'Auto 60s', refreshed_ok: 'Data refreshed with no quota used', refresh_fail: 'Could not refresh',
     link_copied: 'Link copied to clipboard', share_fail: 'Could not create link',
-    settings: 'Settings', style_title: 'Interface style', style_sub: 'Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).',
+    settings: 'Settings', options_menu: 'Options', style_title: 'Interface style', style_sub: 'Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).',
     style_ph: 'E.g.: dark mode with green accents and big numbers...', save: 'Save', reset_default: 'Reset',
     s_min: 'Minimalist enterprise', s_glass: 'Glassmorphism', s_dark: 'Simple dark', s_corp: 'Classic corporate', s_custom: 'Custom', style_saved: 'Style saved',
     model_label: 'Model', creativity: 'Creativity', mode_label: 'Mode', mode_full: 'Full interface', mode_data: 'Data only',
@@ -132,14 +132,98 @@ sendBtn.addEventListener('click', handleSubmit);
 $('lang-es').addEventListener('click', () => { applyLang('es'); refreshConfigLabels(); });
 $('lang-en').addEventListener('click', () => { applyLang('en'); refreshConfigLabels(); });
 
-document.querySelectorAll('.suggestion-chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
-    chatTextarea.value = chip.dataset[lang === 'es' ? 'promptEs' : 'promptEn'] || chip.dataset.promptEn;
-    chatTextarea.dispatchEvent(new Event('input'));
-    chatTextarea.focus();
-    handleSubmit();
-  });
+// ─── Quick prompts: editable, deletable, pinnable, addable ──────────────────
+const PROMPT_KEY = 'glintmesh-prompts-v1';
+const DEFAULT_PROMPTS = [
+  { id: 'p1', es: "Muéstrame un dashboard de portafolio en tiempo real para acciones AAPL, MSFT, NVDA y TSLA", en: "Show me a real-time portfolio dashboard for AAPL, MSFT, NVDA and TSLA stocks", icon: 'bi-pie-chart-fill', pinned: false },
+  { id: 'p2', es: "Genera un monitor de índices S&P 500, NASDAQ, Dow Jones e IPC México", en: "Generate a market indices monitor showing S&P 500, NASDAQ, Dow Jones and IPC Mexico with live data", icon: 'bi-graph-up-arrow', pinned: false },
+  { id: 'p3', es: "Crea un dashboard de análisis de riesgo crediticio para una hipoteca de $250,000 con ingreso de $75,000", en: "Create a credit risk analysis dashboard for a $250,000 mortgage application with income $75,000", icon: 'bi-shield-check', pinned: false },
+  { id: 'p4', es: "Construye una calculadora de interés compuesto para $10,000 a 30 años al 8% anual", en: "Build a compound interest calculator showing growth projections for $10,000 over 30 years at 8% annual rate", icon: 'bi-calculator', pinned: false },
+  { id: 'p5', es: "Muéstrame un tablero de tipos de cambio con USD como base y gráfico histórico de BTC", en: "Show me a forex exchange rates dashboard with USD as base currency and historical BTC price chart", icon: 'bi-currency-exchange', pinned: false },
+  { id: 'p6', es: "Genera un feed de noticias financieras con sentimiento de mercado y titulares", en: "Generate a financial news feed dashboard with market sentiment indicators and latest headlines", icon: 'bi-newspaper', pinned: false },
+];
+let prompts = [];
+try {
+  const saved = JSON.parse(localStorage.getItem(PROMPT_KEY) || 'null');
+  prompts = Array.isArray(saved) && saved.length ? saved : DEFAULT_PROMPTS.map((p) => ({ ...p }));
+} catch (e) { prompts = DEFAULT_PROMPTS.map((p) => ({ ...p })); }
+function savePrompts() { try { localStorage.setItem(PROMPT_KEY, JSON.stringify(prompts)); } catch (e) {} }
+function promptText(p) { const l = lang === 'es' ? p.es : p.en; return l || p.es || p.en || ''; }
+function renderPrompts() {
+  const list = $('prompt-list');
+  if (!list) return;
+  const sorted = [...prompts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+  if (!sorted.length) {
+    list.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">No prompts. Pulsa + para añadir uno.</div>';
+    return;
+  }
+  list.innerHTML = sorted.map((p) => {
+    const label = promptText(p);
+    return '<div class="prompt-row" data-id="' + escapeHtml(p.id) + '">'
+      + '<button class="suggestion-chip" title="' + escapeHtml(label) + '"><i class="bi ' + escapeHtml(p.icon || 'bi-lightning-charge') + '"></i><span>' + escapeHtml(label) + '</span></button>'
+      + '<button class="prompt-act ' + (p.pinned ? 'pinned' : '') + '" data-act="pin" title="Pin / unpin">' + (p.pinned ? '<i class="bi bi-pin-angle-fill"></i>' : '<i class="bi bi-pin-angle"></i>') + '</button>'
+      + '<button class="prompt-act" data-act="edit" title="Edit"><i class="bi bi-pencil"></i></button>'
+      + '<button class="prompt-act" data-act="del" title="Delete"><i class="bi bi-x-lg"></i></button>'
+      + '</div>';
+  }).join('');
+}
+const promptListEl = $('prompt-list');
+promptListEl.addEventListener('click', (e) => {
+  const row = e.target.closest('.prompt-row');
+  if (!row) return;
+  const p = prompts.find((x) => x.id === row.dataset.id);
+  if (!p) return;
+  const actBtn = e.target.closest('[data-act]');
+  if (actBtn) {
+    const act = actBtn.dataset.act;
+    if (act === 'pin') p.pinned = !p.pinned;
+    else if (act === 'del') prompts = prompts.filter((x) => x.id !== p.id);
+    else if (act === 'edit') { openPromptEditor(p); return; }
+    savePrompts();
+    renderPrompts();
+    return;
+  }
+  const txt = lang === 'es' ? p.es : p.en;
+  if (!txt) return;
+  chatTextarea.value = txt;
+  chatTextarea.dispatchEvent(new Event('input'));
+  chatTextarea.focus();
+  handleSubmit();
 });
+let editingPromptId = null;
+function openPromptEditor(p) {
+  editingPromptId = p ? p.id : null;
+  $('prompt-modal-title').textContent = p ? t('edit_prompt') : t('add_prompt');
+  $('prompt-es').value = p ? (p.es || '') : '';
+  $('prompt-en').value = p ? (p.en || '') : '';
+  $('prompt-overlay').style.display = 'block';
+  $('prompt-modal').style.display = 'block';
+  $('prompt-es').focus();
+}
+function closePromptEditor() {
+  $('prompt-overlay').style.display = 'none';
+  $('prompt-modal').style.display = 'none';
+  editingPromptId = null;
+}
+$('btn-add-prompt').addEventListener('click', () => openPromptEditor(null));
+$('btn-close-prompt').addEventListener('click', closePromptEditor);
+$('btn-prompt-cancel').addEventListener('click', closePromptEditor);
+$('prompt-overlay').addEventListener('click', closePromptEditor);
+$('btn-prompt-save').addEventListener('click', () => {
+  const es = $('prompt-es').value.trim().slice(0, 500);
+  const en = $('prompt-en').value.trim().slice(0, 500);
+  if (!es && !en) { showToast(t('prompt_need'), 'error'); return; }
+  if (editingPromptId) {
+    const p = prompts.find((x) => x.id === editingPromptId);
+    if (p) { p.es = es; p.en = en || es; }
+  } else {
+    prompts.push({ id: 'cp_' + Date.now().toString(36), es, en: en || es, icon: 'bi-lightning-charge', pinned: false });
+  }
+  savePrompts();
+  renderPrompts();
+  closePromptEditor();
+});
+renderPrompts();
 
 $('btn-clear').addEventListener('click', () => {
   state.controller?.abort(); state.controller = null; state.isGenerating = false; state.a2ui = [];
@@ -242,7 +326,7 @@ function syncSettingsUI() {
   ta.value = stylePrompt;
   $('style-count').textContent = ta.value.length + ' / 1000';
   document.querySelectorAll('#style-presets [data-preset]').forEach((b) => {
-    b.style.borderColor = b.dataset.preset === stylePreset ? 'rgba(52,211,153,0.5)' : '';
+    b.style.borderColor = b.dataset.preset === stylePreset ? cv('--ok-active-bd') : '';
   });
   const sel = $('gen-model');
   sel.innerHTML = '<option value="">default</option>' + (cachedHealth && cachedHealth.models ? cachedHealth.models.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') : '');
@@ -251,8 +335,8 @@ function syncSettingsUI() {
   }
   $('gen-temp').value = Math.round(genTemp * 100);
   $('gen-temp-val').textContent = Number(genTemp).toFixed(1);
-  $('mode-full').style.borderColor = genMode === 'full' ? 'rgba(52,211,153,0.5)' : '';
-  $('mode-data').style.borderColor = genMode === 'data' ? 'rgba(52,211,153,0.5)' : '';
+  $('mode-full').style.borderColor = genMode === 'full' ? cv('--ok-active-bd') : '';
+  $('mode-data').style.borderColor = genMode === 'data' ? cv('--ok-active-bd') : '';
   refreshSettingsSession();
 }
 function openSettings() {
@@ -273,7 +357,7 @@ document.querySelectorAll('#style-presets [data-preset]').forEach((b) => b.addEv
   openSettingsRefresh();
 }));
 function openSettingsRefresh() {
-  document.querySelectorAll('#style-presets [data-preset]').forEach((x) => { x.style.borderColor = x.dataset.preset === stylePreset ? 'rgba(52,211,153,0.5)' : ''; });
+  document.querySelectorAll('#style-presets [data-preset]').forEach((x) => { x.style.borderColor = x.dataset.preset === stylePreset ? cv('--ok-active-bd') : ''; });
 }
 $('style-textarea').addEventListener('input', (e) => {
   $('style-count').textContent = e.target.value.length + ' / 1000';
@@ -335,7 +419,7 @@ async function refreshSettingsDatasets() {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary);';
       const imp = getImportant().datasets.includes(d.id);
-      row.innerHTML = '<i class="bi bi-database" style="color:#34d399;"></i><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>' + starBtn(imp) + '<button class="btn-glass btn-sm"></button>';
+      row.innerHTML = '<i class="bi bi-database" style="color:var(--ok-color);"></i><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>' + starBtn(imp) + '<button class="btn-glass btn-sm"></button>';
       row.querySelector('span').textContent = d.name + ' (' + d.n_rows + ')';
       row.querySelector('[data-star]').addEventListener('click', () => {
         const v = getImportant();
@@ -389,8 +473,8 @@ async function wipeAll(keepImportant) {
   if (!keepImportant) {
     try { localStorage.removeItem(STYLE_KEY); localStorage.removeItem(UI_KEY); localStorage.removeItem(IMPORTANT_KEY); } catch (e) {}
     stylePrompt = ''; stylePreset = 'minimalist'; genModel = ''; genTemp = 0.7; genMode = 'full';
-    uiTheme = 'variant-dark'; userCss = '';
-    applyUI(); refreshSettingsDot();
+    themeId = 'red-white'; userCss = '';
+    applyTheme(); refreshSettingsDot();
   }
   if (activeDataset && !(keepImportant && imp.datasets.includes(activeDataset.id))) {
   activeDataset = null; refreshDatasetChip();
@@ -404,32 +488,55 @@ $('btn-wipe-keep').addEventListener('click', () => wipeAll(true));
 $('btn-wipe-all2').addEventListener('click', () => wipeAll(false));
 refreshSettingsDot();
 
-// ─── App appearance: theme + custom CSS (app shell only) ────────────────────
-const UI_KEY = 'glintmesh-ui-v1';
-let uiTheme = 'variant-dark', userCss = '';
+// ─── App appearance: themes (JSON) + custom CSS (app shell only) ────────────
+const UI_KEY = 'glintmesh-ui-v3';
+let THEMES = [];
+let themeId = 'red-white', userCss = '';
 try {
   const savedUI = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
   if (savedUI) {
-    if (savedUI.theme === 'variant-light' || savedUI.theme === 'variant-dark') uiTheme = savedUI.theme;
+    if (typeof savedUI.theme === 'string' && savedUI.theme) themeId = savedUI.theme;
     userCss = (savedUI.css || '').slice(0, 3000);
   }
 } catch (e) {}
-function applyUI() {
-  document.body.classList.remove('variant-dark', 'variant-light');
-  document.body.classList.add(uiTheme);
-  const tag = $('user-css');
-  if (tag) tag.textContent = userCss;
-  const d = $('ui-dark'), l = $('ui-light');
-  if (d) d.style.borderColor = uiTheme === 'variant-dark' ? 'rgba(52,211,153,0.5)' : '';
-  if (l) l.style.borderColor = uiTheme === 'variant-light' ? 'rgba(52,211,153,0.5)' : '';
+function cv(name, fallback = '') {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+function getTheme(id) { return THEMES.find((t) => t.id === id) || null; }
+function applyTheme() {
+  document.body.dataset.theme = themeId;
+  const root = document.documentElement;
+  for (const p of Array.from(root.style)) { if (p.startsWith('--')) root.style.removeProperty(p); }
+  const theme = getTheme(themeId);
+  if (theme && theme.vars) {
+    Object.entries(theme.vars).forEach(([k, v]) => { if (v !== '' && v != null) root.style.setProperty(k, v); });
+  }
+  const tag = $('theme-css');
+  if (tag) tag.textContent = (theme && theme.css) || '';
+  const u = $('user-css');
+  if (u) u.textContent = userCss;
+  document.querySelectorAll('#theme-grid [data-theme]').forEach((b) => {
+    b.style.borderColor = b.dataset.theme === themeId ? cv('--ok-active-bd') : '';
+  });
+  if ($('ui-dark')) $('ui-dark').style.borderColor = themeId === 'dark' ? cv('--ok-active-bd') : '';
+  if ($('ui-light')) $('ui-light').style.borderColor = themeId === 'light' ? cv('--ok-active-bd') : '';
   const ta = $('user-css-textarea');
   if (ta && document.activeElement !== ta) ta.value = userCss;
 }
 function persistUI() {
-  try { localStorage.setItem(UI_KEY, JSON.stringify({ theme: uiTheme, css: userCss })); } catch (e) {}
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ theme: themeId, css: userCss })); } catch (e) {}
 }
-$('ui-dark').addEventListener('click', () => { uiTheme = 'variant-dark'; persistUI(); applyUI(); });
-$('ui-light').addEventListener('click', () => { uiTheme = 'variant-light'; persistUI(); applyUI(); });
+function buildThemeGrid() {
+  const grid = $('theme-grid');
+  if (!grid) return;
+  grid.innerHTML = THEMES.map((t) => '<button class="btn-glass btn-sm" data-theme="' + escapeHtml(t.id) + '" style="flex:1 0 40%;">' + escapeHtml(t.name) + '</button>').join('');
+  grid.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', () => {
+    themeId = b.dataset.theme; persistUI(); applyTheme();
+  }));
+}
+$('ui-dark').addEventListener('click', () => { themeId = getTheme('dark') ? 'dark' : (THEMES[0]?.id || 'red-white'); persistUI(); applyTheme(); });
+$('ui-light').addEventListener('click', () => { themeId = getTheme('light') ? 'light' : (THEMES[0]?.id || 'red-white'); persistUI(); applyTheme(); });
 $('user-css-textarea').addEventListener('input', (e) => {
   userCss = e.target.value.slice(0, 3000);
   const tag = $('user-css');
@@ -452,11 +559,22 @@ document.querySelectorAll('[data-snip]').forEach((b) => b.addEventListener('clic
   persistUI();
 }));
 $('btn-reset-look').addEventListener('click', () => {
-  uiTheme = 'variant-dark'; userCss = '';
-  persistUI(); applyUI();
+  themeId = 'red-white'; userCss = '';
+  persistUI(); applyTheme();
   showToast(t('style_saved'), 'success');
 });
-applyUI();
+applyTheme();
+async function loadThemes() {
+  try {
+    const res = await fetch('/static/themes.json');
+    const data = await res.json();
+    if (Array.isArray(data.themes)) THEMES = data.themes;
+  } catch (e) { THEMES = []; }
+  if (!THEMES.some((t) => t.id === themeId)) themeId = THEMES[0]?.id || 'red-white';
+  buildThemeGrid();
+  applyTheme();
+}
+loadThemes();
 
 // ─── Important flags + wipe-all with warning ────────────────────────────────
 const IMPORTANT_KEY = 'glintmesh-important-v1';
@@ -809,7 +927,8 @@ function renderA2UIBody(tool, data, cid) {
 function mountA2UIChart(tool, data, cid) {
   if (!window.Chart) return;
   try {
-    Chart.defaults.color = '#8a94a8';
+    const okChart = cv('--ok-chart'), okFill = cv('--ok-chart-fill'), grid = cv('--grid-line'), sec = cv('--chart-secondary', '#64748b');
+    Chart.defaults.color = cv('--text-muted', '#8a94a8');
     Chart.defaults.font.family = 'Inter, sans-serif';
     const el = document.getElementById(cid);
     if (!el) return;
@@ -817,10 +936,10 @@ function mountA2UIChart(tool, data, cid) {
     if (tool === 'get_historical_prices' || tool === 'get_live_history') {
       const pts = data.data || [];
       const step = Math.max(1, Math.ceil(pts.length / 14));
-      cfg = { type: 'line', data: { labels: pts.filter((_, i) => i % step === 0).map((p) => p.date), datasets: [{ data: pts.filter((_, i) => i % step === 0).map((p) => p.close), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } };
+      cfg = { type: 'line', data: { labels: pts.filter((_, i) => i % step === 0).map((p) => p.date), datasets: [{ data: pts.filter((_, i) => i % step === 0).map((p) => p.close), borderColor: okChart, backgroundColor: okFill, fill: true, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { display: false } }, scales: { x: { grid: { color: grid } }, y: { grid: { color: grid } } } } };
     } else if (tool === 'calculate_compound_interest') {
       const yrs = data.yearly_breakdown || [];
-      cfg = { type: 'line', data: { labels: yrs.map((y) => 'Y' + y.year), datasets: [{ label: 'Balance', data: yrs.map((y) => y.balance), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3 }, { label: 'Contributions', data: yrs.map((y) => y.contributions), borderColor: '#64748b', borderDash: [5, 4], fill: false, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { labels: { boxWidth: 12 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } };
+      cfg = { type: 'line', data: { labels: yrs.map((y) => 'Y' + y.year), datasets: [{ label: 'Balance', data: yrs.map((y) => y.balance), borderColor: okChart, backgroundColor: okFill, fill: true, tension: .3 }, { label: 'Contributions', data: yrs.map((y) => y.contributions), borderColor: sec, borderDash: [5, 4], fill: false, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { labels: { boxWidth: 12 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: grid } } } } };
     }
     if (cfg) state.charts.push(new Chart(el, cfg));
   } catch (e) {}

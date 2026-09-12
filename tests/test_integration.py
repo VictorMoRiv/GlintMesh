@@ -60,7 +60,7 @@ class IntegrationTests(unittest.TestCase):
         return [json.loads(frame[6:]) for frame in result.text.strip().split("\n\n")]
 
     def test_ui_and_health_do_not_expose_key(self):
-        for url in ("/", "/health", "/static/app.js"):
+        for url in ("/", "/health", "/static/app.js", "/static/themes.json"):
             result = self.client.get(url)
             self.assertEqual(result.status_code, 200)
             self.assertNotIn("test-key-never-public", result.text)
