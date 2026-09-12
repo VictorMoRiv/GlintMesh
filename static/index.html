@@ -256,6 +256,8 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
     body.variant-light .a2ui-table td { border-bottom-color:#eef2f7; }
     body.variant-light .tab-btn.active { color:#4f46e5; background:rgba(79,70,229,0.08); border-color:rgba(79,70,229,0.25); }
     body.variant-light .a2ui-riskbar { background:#e2e8f0; }
+    body.variant-light #gmBolt stop:first-child { stop-color:#4f46e5; }
+    body.variant-light #gmBolt stop:last-child { stop-color:#7c3aed; }
   </style>
   <style id="user-css"></style>
 </head>
@@ -530,20 +532,43 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
   </div>
   <hr style="border-color:var(--glass-border); margin:16px 0;" />
   <div>
-    <div style="font-size:12px; font-weight:700; margin-bottom:8px;" data-i18n="app_look">App appearance</div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:700;" data-i18n="app_look">App appearance</div>
+      <button class="btn-glass btn-sm" id="btn-reset-look" style="margin-left:auto;"><span data-i18n="reset_look">Reset look</span></button>
+    </div>
     <div style="display:flex; gap:6px; margin-bottom:10px;">
       <button class="btn-glass btn-sm" id="ui-dark" style="flex:1;"><span data-i18n="ui_dark">Dark</span></button>
       <button class="btn-glass btn-sm" id="ui-light" style="flex:1;"><span data-i18n="ui_light">Light</span></button>
     </div>
-    <textarea id="user-css-textarea" rows="3" maxlength="3000" data-i18n-ph="css_ph" placeholder="Custom CSS for the app shell, e.g.: #header { background:#111; }" style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
+    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+      <button class="btn-glass btn-sm" data-snip="blue"><span data-i18n="snip_blue">Blue header</span></button>
+      <button class="btn-glass btn-sm" data-snip="round"><span data-i18n="snip_round">All rounded</span></button>
+      <button class="btn-glass btn-sm" data-snip="compact"><span data-i18n="snip_compact">Compact</span></button>
+    </div>
+    <textarea id="user-css-textarea" rows="3" maxlength="3000" data-i18n-ph="css_ph" placeholder="Un solo prompt de diseño: pega un snippet o escribe tu CSS..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
     <div style="font-size:11px; color:var(--text-muted); margin-top:6px;" data-i18n="css_hint">Applies live to this app only. Never affects generated interfaces.</div>
   </div>
   <hr style="border-color:var(--glass-border); margin:16px 0;" />
   <div>
-    <div style="font-size:12px; font-weight:700; margin-bottom:8px;" data-i18n="data_mgmt">Saved data</div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:700;" data-i18n="data_mgmt">Saved data</div>
+      <button class="btn-glass btn-sm" id="btn-wipe-all" style="margin-left:auto; border-color:rgba(239,68,68,0.4); color:#f87171;"><span data-i18n="del_all">Delete all</span></button>
+    </div>
     <div id="settings-session" style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;"></div>
     <div id="settings-datasets" style="display:flex; flex-direction:column; gap:6px;"></div>
   </div>
+
+<!-- Wipe confirm modal -->
+<div id="wipe-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.7); z-index:9020;"></div>
+<div id="wipe-modal" style="display:none; position:fixed; z-index:9021; top:50%; left:50%; transform:translate(-50%,-50%); width:min(420px,92vw); background:rgba(10,15,40,0.97); border:1px solid rgba(239,68,68,0.4); border-radius:14px; padding:20px;">
+  <h5 style="margin:0 0 8px; font-size:15px; font-weight:700; color:#f87171;" data-i18n="wipe_title">Delete saved data?</h5>
+  <p id="wipe-text" style="font-size:12.5px; color:var(--text-secondary); margin:0 0 16px;"></p>
+  <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+    <button class="btn-glass" id="btn-wipe-cancel"><span data-i18n="cancel">Cancel</span></button>
+    <button class="btn-glass" id="btn-wipe-keep" style="border-color:rgba(52,211,153,0.4); color:#34d399;"><span data-i18n="keep_imp">Keep important</span></button>
+    <button class="btn-glass" id="btn-wipe-all2" style="border-color:rgba(239,68,68,0.5); color:#f87171;"><span data-i18n="del_everything">Delete everything</span></button>
+  </div>
+</div>
 </div>
 
 <div id="toast-container"></div>

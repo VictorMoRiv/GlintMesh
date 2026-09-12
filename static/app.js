@@ -27,8 +27,12 @@ const I18N = {
     model_label: 'Modelo', creativity: 'Creatividad', mode_label: 'Modo', mode_full: 'Interfaz completa', mode_data: 'Solo datos',
     data_mgmt: 'Datos guardados', saved_session: 'Sesión guardada', session_empty: 'Sin sesión guardada', delete: 'Borrar',
     app_look: 'Apariencia de la app', ui_dark: 'Oscuro', ui_light: 'Claro',
-    css_ph: 'CSS propio para la app, ej.: #header { background:#111; }',
+    css_ph: 'Un solo prompt de diseño: pega un snippet o escribe tu CSS...',
     css_hint: 'Se aplica en vivo solo a esta app. Nunca afecta las interfaces generadas.',
+    reset_look: 'Restablecer apariencia', snip_blue: 'Header azul', snip_round: 'Todo redondeado', snip_compact: 'Compacto',
+    del_all: 'Borrar todo', keep_imp: 'Conservar importantes', del_everything: 'Borrar todo', cancel: 'Cancelar',
+    wipe_title: '¿Borrar datos guardados?', wipe_will_delete: 'Se borrará:', w_session: 'sesión', w_datasets: 'datasets', w_prefs: 'preferencias',
+    imp_tag: 'importante', wiped_ok: 'Datos eliminados',
     session_cleared: 'Sesión limpiada', no_export: 'Aún no hay interfaz para exportar', exported: 'Interfaz exportada',
     copied: 'Código copiado', mcp_disabled: 'MCP desactivado. Gemini funciona sin herramientas.', mcp_error: 'No se pudieron obtener herramientas',
     waiting: 'Esperando a Gemini...', generating: 'Generando interfaz...', analyzing: 'Analizando solicitud...',
@@ -59,8 +63,12 @@ const I18N = {
     model_label: 'Model', creativity: 'Creativity', mode_label: 'Mode', mode_full: 'Full interface', mode_data: 'Data only',
     data_mgmt: 'Saved data', saved_session: 'Saved session', session_empty: 'No saved session', delete: 'Delete',
     app_look: 'App appearance', ui_dark: 'Dark', ui_light: 'Light',
-    css_ph: 'Custom CSS for the app shell, e.g.: #header { background:#111; }',
+    css_ph: 'One design prompt: paste a snippet or write your CSS...',
     css_hint: 'Applies live to this app only. Never affects generated interfaces.',
+    reset_look: 'Reset look', snip_blue: 'Blue header', snip_round: 'All rounded', snip_compact: 'Compact',
+    del_all: 'Delete all', keep_imp: 'Keep important', del_everything: 'Delete everything', cancel: 'Cancel',
+    wipe_title: 'Delete saved data?', wipe_will_delete: 'Will delete:', w_session: 'session', w_datasets: 'datasets', w_prefs: 'preferences',
+    imp_tag: 'important', wiped_ok: 'Data deleted',
     session_cleared: 'Session cleared', no_export: 'No interface to export yet', exported: 'Interface exported',
     copied: 'Code copied to clipboard', mcp_disabled: 'MCP is disabled. Gemini works without tools.', mcp_error: 'Could not fetch tools',
     waiting: 'Waiting for Gemini...', generating: 'Generating interface...', analyzing: 'Analyzing request...',
@@ -296,9 +304,15 @@ function refreshSettingsSession() {
   try { session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
   const el = $('settings-session');
   if (session && (session.generatedHTML || session.agentMessage)) {
+    const imp = getImportant();
     const when = session.ts ? new Date(session.ts).toLocaleString() : '';
-    el.innerHTML = '<span></span> <button class="btn-glass btn-sm" id="btn-wipe-session" style="margin-left:8px;"></button>';
+    el.innerHTML = '<span></span><span class="star-wrap"></span> <button class="btn-glass btn-sm" id="btn-wipe-session" style="margin-left:8px;"></button>';
     el.querySelector('span').textContent = t('saved_session') + (when ? ' · ' + when : '');
+    const wrap = el.querySelector('.star-wrap');
+    wrap.innerHTML = starBtn(imp.session);
+    wrap.querySelector('[data-star]').addEventListener('click', () => {
+      const v = getImportant(); v.session = !v.session; saveImportant(v); refreshSettingsSession();
+    });
     el.querySelector('#btn-wipe-session').textContent = t('delete');
     el.querySelector('#btn-wipe-session').addEventListener('click', () => {
       try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
@@ -317,9 +331,15 @@ async function refreshSettingsDatasets() {
     (data.datasets || []).forEach((d) => {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary);';
-      row.innerHTML = '<i class="bi bi-database" style="color:#34d399;"></i><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span><button class="btn-glass btn-sm"></button>';
+      const imp = getImportant().datasets.includes(d.id);
+      row.innerHTML = '<i class="bi bi-database" style="color:#34d399;"></i><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>' + starBtn(imp) + '<button class="btn-glass btn-sm"></button>';
       row.querySelector('span').textContent = d.name + ' (' + d.n_rows + ')';
-      const btn = row.querySelector('button');
+      row.querySelector('[data-star]').addEventListener('click', () => {
+        const v = getImportant();
+        v.datasets = v.datasets.includes(d.id) ? v.datasets.filter((x) => x !== d.id) : [...v.datasets, d.id];
+        saveImportant(v); refreshSettingsDatasets();
+      });
+      const btn = row.querySelector('.btn-glass:not([data-star])');
       btn.textContent = t('delete');
       btn.addEventListener('click', async () => {
         await fetch('/api/datasets/' + encodeURIComponent(d.id), { method: 'DELETE' });
@@ -331,6 +351,53 @@ async function refreshSettingsDatasets() {
     if (!box.children.length) box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">' + t('no_datasets') + '</div>';
   } catch (e) {}
 }
+$('btn-wipe-all').addEventListener('click', async () => {
+  let nDatasets = 0, hasSession = false;
+  try {
+    const res = await fetch('/api/datasets');
+    nDatasets = ((await res.json()).datasets || []).length;
+  } catch (e) {}
+  try { hasSession = !!JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) {}
+  const imp = getImportant();
+  const parts = [];
+  if (hasSession) parts.push('1 ' + t('w_session') + (imp.session ? ' (' + t('imp_tag') + ')' : ''));
+  if (nDatasets) parts.push(nDatasets + ' ' + t('w_datasets') + (imp.datasets.length ? ' (' + imp.datasets.length + ' ' + t('imp_tag') + ')' : ''));
+  parts.push(t('w_prefs'));
+  $('wipe-text').textContent = t('wipe_will_delete') + ' ' + parts.join(', ') + '.';
+  $('wipe-overlay').style.display = 'block';
+  $('wipe-modal').style.display = 'block';
+});
+function closeWipe() { $('wipe-overlay').style.display = 'none'; $('wipe-modal').style.display = 'none'; }
+$('btn-wipe-cancel').addEventListener('click', closeWipe);
+$('wipe-overlay').addEventListener('click', closeWipe);
+async function wipeAll(keepImportant) {
+  const imp = keepImportant ? getImportant() : { datasets: [], session: false };
+  try {
+    const res = await fetch('/api/datasets');
+    const items = ((await res.json()).datasets || []);
+    for (const d of items) {
+      if (keepImportant && imp.datasets.includes(d.id)) continue;
+      await fetch('/api/datasets/' + encodeURIComponent(d.id), { method: 'DELETE' });
+    }
+  } catch (e) {}
+  if (!keepImportant || !imp.session) {
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  }
+  if (!keepImportant) {
+    try { localStorage.removeItem(STYLE_KEY); localStorage.removeItem(UI_KEY); localStorage.removeItem(IMPORTANT_KEY); } catch (e) {}
+    stylePrompt = ''; stylePreset = 'minimalist'; genModel = ''; genTemp = 0.7; genMode = 'full';
+    uiTheme = 'variant-dark'; userCss = '';
+    applyUI(); refreshSettingsDot();
+  }
+  if (activeDataset && !(keepImportant && imp.datasets.includes(activeDataset.id))) {
+    activeDataset = null; refreshDatasetChip();
+  }
+  closeWipe(); closeSettings();
+  refreshSettingsSession(); refreshSettingsDatasets();
+  showToast(t('wiped_ok'), 'success');
+}
+$('btn-wipe-keep').addEventListener('click', () => wipeAll(true));
+$('btn-wipe-all2').addEventListener('click', () => wipeAll(false));
 refreshSettingsDot();
 
 // ─── App appearance: theme + custom CSS (app shell only) ────────────────────
@@ -365,7 +432,44 @@ $('user-css-textarea').addEventListener('input', (e) => {
   if (tag) tag.textContent = userCss;
   persistUI();
 });
+const CSS_SNIPS = {
+  blue: '#header { background:linear-gradient(135deg,#1e3a8a,#1e40af) !important; }',
+  round: '#sidebar, #content-area, .tool-card, .feature-card, #input-wrapper, .a2ui-card { border-radius:20px !important; }',
+  compact: '#header { height:52px !important; } #main-body { padding:8px !important; gap:8px !important; } .feature-card { padding:10px 8px !important; }',
+};
+document.querySelectorAll('[data-snip]').forEach((b) => b.addEventListener('click', () => {
+  const snip = CSS_SNIPS[b.dataset.snip];
+  if (!snip) return;
+  const ta = $('user-css-textarea');
+  ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + snip;
+  userCss = ta.value.slice(0, 3000);
+  const tag = $('user-css');
+  if (tag) tag.textContent = userCss;
+  persistUI();
+}));
+$('btn-reset-look').addEventListener('click', () => {
+  uiTheme = 'variant-dark'; userCss = '';
+  persistUI(); applyUI();
+  showToast(t('style_saved'), 'success');
+});
 applyUI();
+
+// ─── Important flags + wipe-all with warning ────────────────────────────────
+const IMPORTANT_KEY = 'glintmesh-important-v1';
+function getImportant() {
+  try {
+    const v = JSON.parse(localStorage.getItem(IMPORTANT_KEY) || 'null');
+    if (v && Array.isArray(v.datasets)) return { datasets: v.datasets, session: !!v.session };
+  } catch (e) {}
+  return { datasets: [], session: false };
+}
+function saveImportant(v) {
+  try { localStorage.setItem(IMPORTANT_KEY, JSON.stringify(v)); } catch (e) {}
+}
+function starBtn(on) {
+  return '<button class="btn-glass btn-sm" data-star="1" title="important" style="padding:3px 7px; color:' + (on ? '#fbbf24' : 'var(--text-muted)') + ';">'
+    + '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M8 1l2.2 4.7 5.1.6-3.8 3.5 1 5-4.5-2.5-4.5 2.5 1-5L.7 6.3l5.1-.6z"/></svg></button>';
+}
 
 // ─── User datasets ──────────────────────────────────────────────────────────
 let activeDataset = null;
