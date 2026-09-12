@@ -383,7 +383,8 @@ class ImagePromptTests(unittest.TestCase):
             result = self.client.post("/api/generate", json={"message": "Describe", "images": [{"mime": "image/png", "data": blob}]})
         self.assertEqual(result.status_code, 200)
         parts = fake.calls[0]["contents"][0].parts
-        self.assertEqual(parts[0].text, "Describe")
+        self.assertTrue(parts[0].text.startswith("Describe"))
+        self.assertIn("Analyze them visually", parts[0].text)
         self.assertTrue(any(getattr(p, "inline_data", None) is not None for p in parts[1:]))
 
 

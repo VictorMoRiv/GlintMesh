@@ -153,6 +153,7 @@ $('btn-clear').addEventListener('click', () => {
   try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   welcomeState.style.display = 'flex'; generatedWrapper.classList.remove('visible');
   agentBubble.style.display = 'none'; previewContainer.style.display = 'none'; agentBubbleText.textContent = '';
+  $('user-bubble').style.display = 'none'; $('user-bubble-text').textContent = ''; $('user-bubble-imgs').innerHTML = '';
   codeOutput.innerHTML = '<code style="color:var(--text-muted); font-size:12px;">// Generated code will appear here...</code>';
   codeBadge.style.display = 'none'; btnCopyCode.style.display = 'none'; a2uiBadge.style.display = 'none';
   toolFeed.innerHTML = '<div style="text-align:center; padding:30px 16px; color:var(--text-muted); font-size:12px;">' + t('tool_empty') + '</div>';
@@ -620,10 +621,20 @@ async function handleSubmit() {
   state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.toolResults = {}; state.a2ui = [];
   destroyA2UICharts();
   $('btn-retry').style.display = 'none'; state.lastError = '';
+  const sentImages = attachedImages.slice(0, 3);
   chatTextarea.value = ''; chatTextarea.style.height = 'auto'; charCount.textContent = '0 / 500';
   attachedImages = []; renderImgStrip();
   sendBtn.disabled = true; progressBar.style.display = 'flex';
   welcomeState.style.display = 'none'; generatedWrapper.classList.add('visible');
+  // user bubble: show what was sent (text + images, Gemini style)
+  const userBubble = $('user-bubble'), userBubbleText = $('user-bubble-text'), userBubbleImgs = $('user-bubble-imgs');
+  userBubble.style.display = 'flex'; userBubbleText.textContent = message;
+  userBubbleImgs.innerHTML = '';
+  sentImages.forEach((im) => {
+    const img = document.createElement('img');
+    img.src = im.url; img.style.cssText = 'width:72px; height:72px; object-fit:cover; border-radius:10px; border:1px solid var(--glass-border);';
+    userBubbleImgs.appendChild(img);
+  });
   agentBubble.style.display = 'flex'; agentBubbleText.textContent = t('waiting');
   toolFeed.innerHTML = ''; codeOutput.textContent = ''; codeOutput.classList.add('streaming');
   codeBadge.style.display = 'none'; btnCopyCode.style.display = 'none'; a2uiBadge.style.display = 'none';
@@ -639,7 +650,7 @@ async function handleSubmit() {
     if (genModel) payload.model = genModel;
     if (genTemp !== 0.7) payload.temperature = genTemp;
     if (genMode === 'data') payload.mode = 'data';
-    if (attachedImages.length) payload.images = attachedImages.map(({ mime, data }) => ({ mime, data }));
+    if (sentImages.length) payload.images = sentImages.map(({ mime, data }) => ({ mime, data }));
     state.lastPayload = { ...payload };
     const response = await fetch('/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },

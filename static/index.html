@@ -399,6 +399,10 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
           </div>
 
           <div id="generated-wrapper">
+            <div class="agent-message-bubble" id="user-bubble" style="display:none; border-color:rgba(79,142,247,0.4);">
+              <div class="agent-avatar" style="background:linear-gradient(135deg,#4f8ef7,#a78bfa);"><i class="bi bi-person-fill" style="color:#fff; font-size:12px;"></i></div>
+              <div style="flex:1;"><div id="user-bubble-text" style="color:var(--text-primary);"></div><div id="user-bubble-imgs" style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;"></div></div>
+            </div>
             <div class="agent-message-bubble" id="agent-bubble" style="display:none;">
               <div class="agent-avatar"><i class="bi bi-robot" style="color:#fff; font-size:12px;"></i></div>
               <div id="agent-bubble-text"></div>
@@ -454,6 +458,7 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
           <span id="dataset-chip-name"></span>
           <button id="dataset-chip-x" style="margin-left:auto; background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:14px;" title="Remove">&times;</button>
         </div>
+        <div id="img-strip" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:12px; padding:8px;"></div>
         <div id="input-wrapper">
           <button id="mic-btn" title="Voice input" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-mic"></i></button>
           <button id="img-btn" title="Attach images" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-image"></i></button>
@@ -461,7 +466,6 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
           <button id="send-btn" title="Generate interface"><i class="bi bi-arrow-up"></i></button>
         </div>
         <input type="file" id="img-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none;" />
-        <div id="img-strip" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap;"></div>
         <div id="input-footer">
           <span data-i18n="disclaimer">GlintMesh may produce simulated financial data for demonstration purposes</span>
           <span id="char-count">0 / 500</span>

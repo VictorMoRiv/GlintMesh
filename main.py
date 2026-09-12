@@ -310,6 +310,7 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
             return
 
     first_parts: list = [types.Part(text=user_message)]
+    n_images = 0
     for img in (images or [])[:3]:
         try:
             import base64 as _b64
@@ -319,8 +320,12 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
             if not raw or len(raw) > 1500000:
                 continue
             first_parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
+            n_images += 1
         except Exception:
             continue
+    if n_images:
+        first_parts[0] = types.Part(text=user_message + f"\n[User attached {n_images} image(s). Analyze them visually FIRST and reference what you see before building anything.]")
+        yield event("status", content=f"Analyzing {n_images} image(s)...")
     contents = [types.Content(role="user", parts=first_parts)]
     if context:
         contents.append(types.Content(role="user", parts=[types.Part(
