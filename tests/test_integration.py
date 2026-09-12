@@ -162,6 +162,14 @@ class IntegrationTests(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertEqual(self.client.post("/api/generate", json={"message": "Hi", **bad}).status_code, 422)
 
+    def test_simulate_flag_reaches_mcp_client(self):
+        fake = FakeClient([[response(types.Part(text="ok"))]])
+        with patch.object(main, "MCP_ENABLED", True), patch.object(main.mcp_client, "list_tools", new_callable=AsyncMock, return_value=[]) as tools, \
+                patch.object(main.genai, "Client", return_value=fake):
+            result = self.client.post("/api/generate", json={"message": "Hi", "simulate": True})
+        self.assertEqual(result.status_code, 200)
+        tools.assert_awaited_once_with(simulate=True)
+
     def test_direct_tool_call(self):
         tool = SimpleNamespace(name="get_live_quote", description="Live", input_schema={})
         with patch.object(main, "MCP_ENABLED", True), patch.object(
@@ -170,7 +178,7 @@ class IntegrationTests(unittest.TestCase):
             result = self.client.post("/api/tool-call", json={"tool": "get_live_quote", "args": {"symbol": "AAPL"}})
             self.assertEqual(result.status_code, 200)
             self.assertEqual(result.json(), {"tool": "get_live_quote", "data": {"price": 1}})
-            call.assert_awaited_once_with("get_live_quote", {"symbol": "AAPL"})
+            call.assert_awaited_once_with("get_live_quote", {"symbol": "AAPL"}, simulate=False)
             self.assertEqual(self.client.post("/api/tool-call", json={"tool": "nope", "args": {}}).status_code, 404)
         self.assertEqual(self.client.post("/api/tool-call", json={"tool": "get_live_quote", "args": {}}).status_code, 503)
 
@@ -189,7 +197,7 @@ class IntegrationTests(unittest.TestCase):
         fake = FakeClient([[response(part)], [response(types.Part(text="Demo quote: 100"))]])
         with patch.object(main, "MCP_ENABLED", True), patch.object(main.mcp_client, "list_tools", new_callable=AsyncMock, return_value=[tool]), patch.object(main.mcp_client, "call_tool", new_callable=AsyncMock, return_value={"price": 100}) as call:
             events = self.generate(fake)
-            call.assert_awaited_once_with("get_stock_quote", {"symbol": "AAPL"})
+            call.assert_awaited_once_with("get_stock_quote", {"symbol": "AAPL"}, simulate=False)
         self.assertEqual(events[-1]["type"], "done")
         self.assertIn("tool_result", [e["type"] for e in events])
         history = fake.calls[1]["contents"]
@@ -198,14 +206,18 @@ class IntegrationTests(unittest.TestCase):
 
 
 class MCPAdapterTests(unittest.IsolatedAsyncioTestCase):
-    async def test_bundled_mcp_lists_tools_and_executes_calculation(self):
+    async def test_live_tools_are_default_and_demo_needs_simulate(self):
         client = main.MCPFinancialClient()
         tools = await client.list_tools()
-        self.assertIn("get_stock_quote", [tool.name for tool in tools])
+        names = [tool.name for tool in tools]
+        self.assertIn("get_live_quote", names)
+        self.assertNotIn("get_stock_quote", names)
+        sim_tools = await client.list_tools(simulate=True)
+        self.assertIn("get_stock_quote", [tool.name for tool in sim_tools])
         self.assertTrue(main.build_gemini_tools(tools))
-        result = await client.call_tool("get_stock_quote", {"symbol": "AAPL"})
+        result = await client.call_tool("get_live_quote", {"symbol": "AAPL"})
         self.assertEqual(result["symbol"], "AAPL")
-        self.assertIsInstance(result["price"], (int, float))
+        self.assertEqual(result["source"], "live")
 
 
 class MultiServerTests(unittest.IsolatedAsyncioTestCase):
@@ -220,7 +232,7 @@ class MultiServerTests(unittest.IsolatedAsyncioTestCase):
         })
 
     async def test_config_lists_demo_and_live(self):
-        self.assertEqual([s["name"] for s in main.MCP_SERVERS], ["demo", "live", "ecb"])
+        self.assertEqual([s["name"] for s in main.MCP_SERVERS], ["demo", "live", "ecb", "mydata"])
 
     async def test_routing_and_grouping(self):
         demo, live = self.demo_tool(), self.live_tool()
@@ -233,13 +245,15 @@ class MultiServerTests(unittest.IsolatedAsyncioTestCase):
         client = main.MCPFinancialClient()
         with patch.object(main.MCPFinancialClient, "_request", autospec=True, side_effect=fake_request):
             tools = await client.list_tools()
-            self.assertEqual([t.name for t in tools], ["get_stock_quote", "get_live_quote"])
+            self.assertEqual([t.name for t in tools], ["get_live_quote"])
+            sim_tools = await client.list_tools(simulate=True)
+            self.assertEqual([t.name for t in sim_tools], ["get_stock_quote", "get_live_quote"])
             groups = await client.list_tools_by_server()
             self.assertEqual([(g["name"], [t.name for t in g["tools"]]) for g in groups],
-                             [("demo", ["get_stock_quote"]), ("live", ["get_live_quote"]), ("ecb", ["get_live_quote"])])
+                             [("live", ["get_live_quote"]), ("ecb", ["get_live_quote"]), ("mydata", ["get_live_quote"])])
             self.assertEqual(await client.call_tool("get_live_quote", {"symbol": "AAPL"}), {"ok": "live"})
-            self.assertEqual(await client.call_tool("get_stock_quote", {"symbol": "AAPL"}), {"ok": "demo"})
-            self.assertEqual(len(main.build_gemini_tools(tools)[0].function_declarations), 2)
+            self.assertEqual(await client.call_tool("get_stock_quote", {"symbol": "AAPL"}, simulate=True), {"ok": "demo"})
+            self.assertEqual(len(main.build_gemini_tools(tools)[0].function_declarations), 1)
 
     def test_api_tools_groups_by_server(self):
         groups = [
@@ -254,6 +268,25 @@ class MultiServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([s["name"] for s in body["servers"]], ["demo", "live"])
         self.assertEqual([(t["name"], t["server"]) for t in body["tools"]],
                          [("get_stock_quote", "demo"), ("get_live_quote", "live")])
+
+
+class PortfolioServerTests(unittest.TestCase):
+    def test_crud_roundtrip(self):
+        import mcp_portfolio
+        import json as js
+        saved = js.loads(mcp_portfolio.save_portfolio("test_mix", ["aapl", "AAPL", " msft "]))
+        self.assertEqual(saved, {"name": "test_mix", "holdings": ["AAPL", "MSFT"], "source": "user"})
+        listed = js.loads(mcp_portfolio.list_portfolios())
+        self.assertIn({"name": "test_mix", "holdings": ["AAPL", "MSFT"]}, listed)
+        got = js.loads(mcp_portfolio.get_portfolio("test_mix"))
+        self.assertEqual(got["holdings"], ["AAPL", "MSFT"])
+        self.assertEqual(js.loads(mcp_portfolio.delete_portfolio("test_mix")), {"deleted": "test_mix"})
+        with self.assertRaises(RuntimeError):
+            mcp_portfolio.get_portfolio("test_mix")
+        with self.assertRaises(RuntimeError):
+            mcp_portfolio.save_portfolio("test_mix", [])
+        for leftover in mcp_portfolio.STORE.glob("test_*"):
+            leftover.unlink(missing_ok=True)
 
 
 class FixtureSchemaTests(unittest.TestCase):

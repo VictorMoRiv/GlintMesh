@@ -45,7 +45,9 @@ Las solicitudes son independientes; la UI todavía no guarda historial entre gen
 
 ## MCP opcional
 
-La UI funciona sin MCP con `MCP_ENABLED=false`. Para probar las ocho herramientas locales de demostración, cambia a `MCP_ENABLED=true` y reinicia el backend. Se usa el SDK oficial MCP v1 (`mcp>=1.20,<2`) y su servidor FastMCP.
+La UI funciona sin MCP con `MCP_ENABLED=false`. Para probar las herramientas locales, cambia a `MCP_ENABLED=true` y reinicia el backend. Se usa el SDK oficial MCP v1 (`mcp>=1.20,<2`) y su servidor FastMCP.
+
+Por default solo se exponen datos reales (Yahoo + BCE) y tus portafolios. Los ocho tools demo de `mcp_server.py` son **simulados** y solo aparecen con modo simulación explícito (`simulate=true` en `/api/generate`, `/api/tools` y `/api/tool-call`, o el toggle en Configuración).
 
 Las cotizaciones, carteras, índices, noticias y tipos de cambio de `mcp_server.py` son **simulados**, no datos financieros en vivo. Gemini recibe esta indicación y debe etiquetar los ejemplos. No se incluyen conexiones a proveedores reales pendientes de implementación.
 

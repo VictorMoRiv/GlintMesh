@@ -40,9 +40,11 @@ gradients, or playful decoration unless the user explicitly asks for a different
 If the user requests another look (dark neon, colorful, playful), follow their request instead.
 Do not use emojis. Make the interface responsive and format financial numbers clearly.
 Never describe invented or simulated numbers as live data. When no data source is available,
-use clearly labeled sample data or the user's supplied values. Demo MCP tools return
-simulated demonstration data: label it as such. Tools named get_live_* return real
-market data via Yahoo Finance: present it as live. Do not invent a successful tool result.
+use clearly labeled sample data or the user's supplied values. Simulated demo tools are only
+available when the user explicitly enables simulation mode: their data is fictional, so always
+label it as simulated demonstration data, never as real. Tools named get_live_* return real
+market data via Yahoo Finance, and get_ecb_rates returns official ECB data: present those as live.
+Do not invent a successful tool result.
 When MCP tools are used, structure the visible output as A2UI-style surfaces (cards, charts, tables).
 """
 
@@ -56,6 +58,7 @@ class GenerateRequest(BaseModel):
     model: str | None = Field(default=None, max_length=80)
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
     mode: str = Field(default="full", pattern="^(full|data)$")
+    simulate: bool = Field(default=False)
 
     @field_validator("message", mode="before")
     @classmethod
@@ -204,9 +207,12 @@ class MCPFinancialClient:
 
     def __init__(self, servers=None):
         self.servers = servers if servers is not None else MCP_SERVERS
-        self._tools_cache = None
+        self._tools_cache = {}
         self._by_server = {}
         self._owner = {}
+
+    def _cache_key(self, simulate: bool) -> str:
+        return "sim" if simulate else "live"
 
     async def _request(self, server, tool_name=None, tool_args=None):
         from mcp import ClientSession, StdioServerParameters
@@ -232,10 +238,13 @@ class MCPFinancialClient:
                     except json.JSONDecodeError:
                         return {"text": text}
 
-    async def list_tools(self):
-        if self._tools_cache is None:
+    async def list_tools(self, simulate: bool = False):
+        key = self._cache_key(simulate)
+        if key not in self._tools_cache:
             flat, by_server, owner = [], {}, {}
             for srv in self.servers:
+                if srv.get("simulated") and not simulate:
+                    continue
                 tools = await self._request(srv)
                 by_server[srv["name"]] = tools
                 for tool in tools:
@@ -243,26 +252,29 @@ class MCPFinancialClient:
                         continue
                     owner[tool.name] = srv
                     flat.append(tool)
-            self._tools_cache = flat
-            self._by_server = by_server
-            self._owner = owner
-        return self._tools_cache
+            self._tools_cache[key] = flat
+            self._by_server[key] = by_server
+            self._owner[key] = owner
+        return self._tools_cache[key]
 
-    async def call_tool(self, name, arguments):
-        if self._tools_cache is None:
-            await self.list_tools()
-        server = self._owner.get(name, self.servers[0] if self.servers else None)
+    async def call_tool(self, name, arguments, simulate: bool = False):
+        key = self._cache_key(simulate)
+        if key not in self._tools_cache:
+            await self.list_tools(simulate=simulate)
+        server = self._owner.get(key, {}).get(name)
         if server is None:
-            raise RuntimeError("No MCP server configured")
+            raise RuntimeError("Unknown tool")
         return await self._request(server, name, arguments)
 
-    async def list_tools_by_server(self):
-        await self.list_tools()
+    async def list_tools_by_server(self, simulate: bool = False):
+        await self.list_tools(simulate=simulate)
+        key = self._cache_key(simulate)
         return [{
             "name": srv["name"],
             "label": srv.get("label", srv["name"]),
-            "tools": self._by_server.get(srv["name"], []),
-        } for srv in self.servers]
+            "simulated": bool(srv.get("simulated")),
+            "tools": self._by_server.get(key, {}).get(srv["name"], []),
+        } for srv in self.servers if (simulate or not srv.get("simulated"))]
 
 
 mcp_client = MCPFinancialClient()
@@ -293,12 +305,12 @@ def gemini_error_message(error):
 async def run_agent_stream(user_message: str, lang: str = "es", context: str | None = None,
                      dataset_text: str | None = None, style_prompt: str | None = None,
                      model_choice: str | None = None, temperature: float | None = None,
-                     mode: str = "full") -> AsyncIterator[str]:
+                     mode: str = "full", simulate: bool = False) -> AsyncIterator[str]:
     yield event("status", content="Connecting to Gemini...")
     mcp_tools = []
     if MCP_ENABLED:
         try:
-            mcp_tools = await mcp_client.list_tools()
+            mcp_tools = await mcp_client.list_tools(simulate=simulate)
         except Exception:
             yield event("error", content="MCP tools are unavailable. Check the MCP server or set MCP_ENABLED=false.")
             return
@@ -376,7 +388,7 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
                         try:
                             if call.name not in allowed_tools:
                                 raise ValueError("Unknown tool")
-                            data = await mcp_client.call_tool(call.name, call_args)
+                            data = await mcp_client.call_tool(call.name, call_args, simulate=simulate)
                             yield event("tool_result", tool=call.name, data=data)
                             result = {"result": data}
                         except Exception:
@@ -407,7 +419,8 @@ async def generate_interface(body: GenerateRequest):
         raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY in the server .env file before generating.")
     dataset_text = load_dataset_context(body.dataset_id) if body.dataset_id else None
     return StreamingResponse(run_agent_stream(body.message, body.lang, body.context, dataset_text,
-                                              body.style_prompt, body.model, body.temperature, body.mode),
+                                              body.style_prompt, body.model, body.temperature, body.mode,
+                                              body.simulate),
                              media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
@@ -438,18 +451,18 @@ class ShareRequest(BaseModel):
 
 
 @app.post("/api/tool-call")
-async def direct_tool_call(body: ToolCallRequest):
+async def direct_tool_call(body: ToolCallRequest, simulate: bool = False):
     """Re-run a single MCP tool without Gemini (free live refresh for A2UI surfaces)."""
     if not MCP_ENABLED:
         raise HTTPException(status_code=503, detail="MCP tools are unavailable.")
     try:
-        tools = await mcp_client.list_tools()
+        tools = await mcp_client.list_tools(simulate=simulate)
     except Exception:
         raise HTTPException(status_code=503, detail="MCP tools are unavailable.")
     if body.tool not in {tool.name for tool in tools}:
         raise HTTPException(status_code=404, detail="Unknown tool.")
     try:
-        data = await mcp_client.call_tool(body.tool, dict(body.args or {}))
+        data = await mcp_client.call_tool(body.tool, dict(body.args or {}), simulate=simulate)
     except Exception:
         raise HTTPException(status_code=502, detail="The MCP tool could not complete the request.")
     return {"tool": body.tool, "data": data}
@@ -504,11 +517,11 @@ async def upload_dataset(file: UploadFile = File(...)):
 
 
 @app.get("/api/tools")
-async def list_tools():
+async def list_tools(simulate: bool = False):
     if not MCP_ENABLED:
         return {"enabled": False, "tools": [], "servers": []}
     try:
-        groups = await mcp_client.list_tools_by_server()
+        groups = await mcp_client.list_tools_by_server(simulate=simulate)
         return {"enabled": True, "tools": [
             {"name": tool.name, "description": tool.description,
              "parameters": _tool_schema(tool), "server": group["name"]}

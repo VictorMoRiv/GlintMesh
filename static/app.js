@@ -25,6 +25,7 @@ const I18N = {
     style_ph: 'Ej.: modo oscuro con acentos verdes y números grandes...', save: 'Guardar', reset_default: 'Restablecer',
     s_min: 'Minimalista empresarial', s_glass: 'Glassmorphism', s_dark: 'Oscuro simple', s_corp: 'Corporativo clásico', s_custom: 'Personalizado', style_saved: 'Estilo guardado',
     model_label: 'Modelo', creativity: 'Creatividad', mode_label: 'Modo', mode_full: 'Interfaz completa', mode_data: 'Solo datos',
+    sim_label: 'Datos simulados', sim_off: 'Solo reales', sim_on: 'Incluir sim', sim_hint: 'Los tools demo simulados solo aparecen si los activas aquí.',
     data_mgmt: 'Datos guardados', saved_session: 'Sesión guardada', session_empty: 'Sin sesión guardada', delete: 'Borrar',
     app_look: 'Apariencia de la app', ui_dark: 'Oscuro', ui_light: 'Claro',
     css_ph: 'Un solo prompt de diseño: pega un snippet o escribe tu CSS...',
@@ -61,6 +62,7 @@ const I18N = {
     style_ph: 'E.g.: dark mode with green accents and big numbers...', save: 'Save', reset_default: 'Reset',
     s_min: 'Minimalist enterprise', s_glass: 'Glassmorphism', s_dark: 'Simple dark', s_corp: 'Classic corporate', s_custom: 'Custom', style_saved: 'Style saved',
     model_label: 'Model', creativity: 'Creativity', mode_label: 'Mode', mode_full: 'Full interface', mode_data: 'Data only',
+    sim_label: 'Simulated data', sim_off: 'Real only', sim_on: 'Include sim', sim_hint: 'Simulated demo tools only appear when enabled here.',
     data_mgmt: 'Saved data', saved_session: 'Saved session', session_empty: 'No saved session', delete: 'Delete',
     app_look: 'App appearance', ui_dark: 'Dark', ui_light: 'Light',
     css_ph: 'One design prompt: paste a snippet or write your CSS...',
@@ -181,7 +183,7 @@ async function loadTools() {
   const list = $('tools-list');
   list.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);padding:8px;">Loading…</div>';
   try {
-    const [healthRes, toolsRes] = await Promise.all([fetch('/health'), fetch('/api/tools')]);
+    const [healthRes, toolsRes] = await Promise.all([fetch('/health'), fetch(toolsURL())]);
     const health = await healthRes.json().catch(() => ({}));
     const data = await toolsRes.json().catch(() => ({}));
     if (!toolsRes.ok) throw new Error('unavailable');
@@ -219,18 +221,21 @@ const STYLE_PRESETS = {
   custom: '',
 };
 let stylePrompt = '', stylePreset = 'minimalist';
-let genModel = '', genTemp = 0.7, genMode = 'full';
+let genModel = '', genTemp = 0.7, genMode = 'full', simMode = false;
 try {
   const saved = JSON.parse(localStorage.getItem(STYLE_KEY) || 'null');
   if (saved) {
     stylePrompt = saved.prompt || ''; stylePreset = saved.preset || 'minimalist';
     genModel = saved.model || ''; genTemp = (typeof saved.temp === 'number') ? saved.temp : 0.7;
     genMode = saved.mode === 'data' ? 'data' : 'full';
+    simMode = !!saved.sim;
   }
 } catch (e) {}
 function persistSettings() {
-  try { localStorage.setItem(STYLE_KEY, JSON.stringify({ prompt: stylePrompt, preset: stylePreset, model: genModel, temp: genTemp, mode: genMode })); } catch (e) {}
+  try { localStorage.setItem(STYLE_KEY, JSON.stringify({ prompt: stylePrompt, preset: stylePreset, model: genModel, temp: genTemp, mode: genMode, sim: simMode })); } catch (e) {}
 }
+function toolCallURL() { return simMode ? '/api/tool-call?simulate=true' : '/api/tool-call'; }
+function toolsURL() { return simMode ? '/api/tools?simulate=true' : '/api/tools'; }
 function refreshSettingsDot() {
   $('settings-dot').style.display = (stylePrompt && stylePreset !== 'minimalist') ? 'block' : 'none';
 }
@@ -250,6 +255,8 @@ function syncSettingsUI() {
   $('gen-temp-val').textContent = Number(genTemp).toFixed(1);
   $('mode-full').style.borderColor = genMode === 'full' ? 'rgba(52,211,153,0.5)' : '';
   $('mode-data').style.borderColor = genMode === 'data' ? 'rgba(52,211,153,0.5)' : '';
+  $('sim-off').style.borderColor = !simMode ? 'rgba(52,211,153,0.5)' : '';
+  $('sim-on').style.borderColor = simMode ? 'rgba(52,211,153,0.5)' : '';
   refreshSettingsSession();
 }
 function openSettings() {
@@ -285,6 +292,8 @@ $('gen-temp').addEventListener('input', (e) => {
 });
 $('mode-full').addEventListener('click', () => { genMode = 'full'; persistSettings(); syncSettingsUI(); });
 $('mode-data').addEventListener('click', () => { genMode = 'data'; persistSettings(); syncSettingsUI(); });
+$('sim-off').addEventListener('click', () => { simMode = false; persistSettings(); syncSettingsUI(); });
+$('sim-on').addEventListener('click', () => { simMode = true; persistSettings(); syncSettingsUI(); });
 $('btn-style-save').addEventListener('click', () => {
   stylePrompt = $('style-textarea').value.trim().slice(0, 1000);
   if (!stylePrompt) stylePreset = 'minimalist';
@@ -557,7 +566,7 @@ async function refreshA2UIData() {
     if (seen.has(call.tool)) continue;
     seen.add(call.tool);
     try {
-      const res = await fetch('/api/tool-call', {
+      const res = await fetch(toolCallURL(), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tool: call.tool, args: call.args || {} }),
       });
@@ -607,6 +616,70 @@ $('btn-share').addEventListener('click', async () => {
   } catch (e) { showToast(t('share_fail'), 'error'); }
 });
 
+// ─── A2UI interactions: sortable tables, drill-down quotes, chart zoom ─────
+function cellValue(td) {
+  const text = (td.textContent || '').trim().replace(/[$,%▲▼]/g, '').replace(/,/g, '');
+  const num = Number(text);
+  return text !== '' && Number.isFinite(num) ? num : (td.textContent || '').trim().toLowerCase();
+}
+function sortA2UITable(th) {
+  const table = th.closest('table');
+  if (!table || !table.tBodies.length) return;
+  const idx = [...th.parentNode.children].indexOf(th);
+  const dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+  table.querySelectorAll('th').forEach((h) => delete h.dataset.dir);
+  th.dataset.dir = dir;
+  const rows = [...table.tBodies[0].rows];
+  rows.sort((a, b) => {
+    const va = cellValue(a.cells[idx]), vb = cellValue(b.cells[idx]);
+    const cmp = (typeof va === 'number' && typeof vb === 'number') ? va - vb : String(va).localeCompare(String(vb));
+    return dir === 'asc' ? cmp : -cmp;
+  });
+  rows.forEach((r) => table.tBodies[0].appendChild(r));
+}
+async function drillSymbol(sym) {
+  const symbol = String(sym || '').trim().toUpperCase();
+  if (!symbol) return;
+  const card = addA2UICard('get_live_quote', null, true);
+  try {
+    const res = await fetch(toolCallURL(), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: 'get_live_quote', args: { symbol } }),
+    });
+    if (!res.ok) throw new Error('quote failed');
+    const data = await res.json();
+    delete card.dataset.pending;
+    fillA2UICard(card, 'get_live_quote', data.data, false);
+  } catch (e) {
+    delete card.dataset.pending;
+    fillA2UICard(card, 'get_live_quote', null, true);
+  }
+}
+async function drillPortfolio(name) {
+  const card = addA2UICard('get_portfolio', null, true);
+  try {
+    const res = await fetch(toolCallURL(), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: 'get_portfolio', args: { name } }),
+    });
+    if (!res.ok) throw new Error('portfolio failed');
+    const data = await res.json();
+    delete card.dataset.pending;
+    fillA2UICard(card, 'get_portfolio', data.data, false);
+  } catch (e) {
+    delete card.dataset.pending;
+    fillA2UICard(card, 'get_portfolio', null, true);
+  }
+}
+a2uiFeed.addEventListener('click', (e) => {
+  const sym = e.target.closest('[data-drill-symbol]');
+  if (sym) { e.preventDefault(); drillSymbol(sym.dataset.drillSymbol); return; }
+  const pf = e.target.closest('[data-drill-portfolio]');
+  if (pf) { e.preventDefault(); drillPortfolio(pf.dataset.drillPortfolio); return; }
+  const th = e.target.closest('th');
+  if (th && th.closest('table.a2ui-sortable')) sortA2UITable(th);
+});
+
 // ─── Submit ─────────────────────────────────────────────────────────────────
 async function handleSubmit() {
   const message = chatTextarea.value.trim();
@@ -634,6 +707,7 @@ async function handleSubmit() {
     if (genModel) payload.model = genModel;
     if (genTemp !== 0.7) payload.temperature = genTemp;
     if (genMode === 'data') payload.mode = 'data';
+    if (simMode) payload.simulate = true;
     const response = await fetch('/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: controller.signal,
@@ -687,6 +761,7 @@ function destroyA2UICharts() {
 }
 
 function a2uiKind(tool) {
+  if (/save_portfolio|list_portfolios|get_portfolio|delete_portfolio/i.test(tool)) return 'user';
   if (/historical|history|prices/i.test(tool)) return 'chart';
   if (/compound/i.test(tool)) return 'chart';
   if (/portfolio|forex|_fx|indices|news|ecb/i.test(tool)) return 'table';
@@ -706,13 +781,28 @@ function a2uiQuote(d) {
 }
 
 function a2uiPortfolio(d) {
-  const rows = (d.positions || []).map((p) => '<tr><td><strong>' + esc(p.symbol) + '</strong></td><td>' + fmtNum(p.shares) + '</td>'
+  const rows = (d.positions || []).map((p) => '<tr><td><strong><a href="#" data-drill-symbol="' + esc(p.symbol) + '">' + esc(p.symbol) + '</a></strong></td><td>' + fmtNum(p.shares) + '</td>'
     + '<td>' + fmtMoney(p.current_price) + '</td><td>' + fmtMoney(p.market_value) + '</td><td>' + deltaBadge(p.gain_percent) + '</td></tr>').join('');
   return '<div class="a2ui-grid">'
     + '<div class="a2ui-metric"><div class="a2ui-mlabel">Total Value</div><div class="a2ui-mval">' + fmtMoney(d.total_market_value) + '</div></div>'
     + '<div class="a2ui-metric"><div class="a2ui-mlabel">Unrealized Gain</div><div class="a2ui-mval">' + fmtMoney(d.total_unrealized_gain) + '</div></div>'
     + '<div class="a2ui-metric"><div class="a2ui-mlabel">Return</div><div class="a2ui-mval">' + deltaBadge(d.total_return_percent) + '</div></div>'
-    + '</div><table class="a2ui-table"><thead><tr><th>Symbol</th><th>Shares</th><th>Price</th><th>Value</th><th>Gain</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    + '</div><table class="a2ui-table a2ui-sortable"><thead><tr><th>Symbol</th><th>Shares</th><th>Price</th><th>Value</th><th>Gain</th></tr></thead><tbody>' + rows + '</tbody></table>'
+    + '<div class="a2ui-mlabel">Click a symbol for a live quote</div>';
+}
+
+function a2uiUserPortfolio(d) {
+  const chips = (d.holdings || []).map((s) => '<button class="btn-glass btn-sm" data-drill-symbol="' + esc(s) + '">' + esc(s) + '</button>').join(' ');
+  return '<div class="a2ui-head-row"><strong>' + esc(d.name || '') + '</strong><span class="a2ui-mlabel">' + (d.holdings || []).length + ' holdings</span></div>'
+    + '<div style="display:flex; flex-wrap:wrap; gap:6px;">' + (chips || '<span class="a2ui-mlabel">empty</span>') + '</div>';
+}
+
+function a2uiPortfolioList(d) {
+  const items = Array.isArray(d) ? d : [];
+  const rows = items.map((p) => '<tr><td><strong><a href="#" data-drill-portfolio="' + esc(p.name) + '">' + esc(p.name) + '</a></strong></td><td>' + (p.holdings || []).length + '</td><td>' + esc((p.holdings || []).join(', ')) + '</td></tr>').join('');
+  return rows
+    ? '<table class="a2ui-table a2ui-sortable"><thead><tr><th>Name</th><th>Holdings</th><th>Symbols</th></tr></thead><tbody>' + rows + '</tbody></table>'
+    : '<div class="a2ui-mlabel">No saved portfolios yet</div>';
 }
 
 function a2uiIndices(d) {
@@ -765,7 +855,7 @@ function a2uiCompound(d, cid) {
 function a2uiForex(d) {
   const rows = Object.entries(d.rates || {}).map(([c, r]) => '<tr><td><strong>' + esc(c) + '</strong></td><td>' + esc(r) + '</td></tr>').join('');
   return '<div class="a2ui-head-row"><span class="a2ui-mlabel">Base</span><strong>' + esc(d.base) + '</strong></div>'
-    + '<table class="a2ui-table"><thead><tr><th>Currency</th><th>Rate</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    + '<table class="a2ui-table a2ui-sortable"><thead><tr><th>Currency</th><th>Rate</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 function renderA2UIBody(tool, data, cid) {
@@ -779,6 +869,9 @@ function renderA2UIBody(tool, data, cid) {
     if (tool === 'analyze_credit_risk') return a2uiCredit(data);
     if (tool === 'calculate_compound_interest') return a2uiCompound(data, cid);
     if (tool === 'get_forex_rates' || tool === 'get_live_fx' || tool === 'get_ecb_rates') return a2uiForex(data);
+    if (tool === 'save_portfolio' || tool === 'get_portfolio') return a2uiUserPortfolio(data);
+    if (tool === 'list_portfolios') return a2uiPortfolioList(data);
+    if (tool === 'delete_portfolio') return '<div class="a2ui-mlabel">Deleted: ' + esc(data.deleted || '') + '</div>';
     return '<pre class="a2ui-raw">' + esc(JSON.stringify(data, null, 2)).slice(0, 4000) + '</pre>';
   } catch (e) {
     return '<div class="a2ui-mlabel">Could not render this surface</div>';
@@ -790,16 +883,18 @@ function mountA2UIChart(tool, data, cid) {
   try {
     Chart.defaults.color = '#8a94a8';
     Chart.defaults.font.family = 'Inter, sans-serif';
+    if (window.ChartZoom) { try { Chart.register(ChartZoom); } catch (e) {} }
+    const zoomOpts = window.ChartZoom ? { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }, pan: { enabled: true, mode: 'x' } } : {};
     const el = document.getElementById(cid);
     if (!el) return;
     let cfg = null;
     if (tool === 'get_historical_prices' || tool === 'get_live_history') {
       const pts = data.data || [];
       const step = Math.max(1, Math.ceil(pts.length / 14));
-      cfg = { type: 'line', data: { labels: pts.filter((_, i) => i % step === 0).map((p) => p.date), datasets: [{ data: pts.filter((_, i) => i % step === 0).map((p) => p.close), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } };
+      cfg = { type: 'line', data: { labels: pts.filter((_, i) => i % step === 0).map((p) => p.date), datasets: [{ data: pts.filter((_, i) => i % step === 0).map((p) => p.close), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { display: false }, zoom: zoomOpts } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } };
     } else if (tool === 'calculate_compound_interest') {
       const yrs = data.yearly_breakdown || [];
-      cfg = { type: 'line', data: { labels: yrs.map((y) => 'Y' + y.year), datasets: [{ label: 'Balance', data: yrs.map((y) => y.balance), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3 }, { label: 'Contributions', data: yrs.map((y) => y.contributions), borderColor: '#64748b', borderDash: [5, 4], fill: false, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { labels: { boxWidth: 12 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } };
+      cfg = { type: 'line', data: { labels: yrs.map((y) => 'Y' + y.year), datasets: [{ label: 'Balance', data: yrs.map((y) => y.balance), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3 }, { label: 'Contributions', data: yrs.map((y) => y.contributions), borderColor: '#64748b', borderDash: [5, 4], fill: false, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { labels: { boxWidth: 12 } }, zoom: zoomOpts }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } } };
     }
     if (cfg) state.charts.push(new Chart(el, cfg));
   } catch (e) {}
@@ -861,6 +956,7 @@ function addA2UICard(tool, data, pending) {
   a2uiFeed.appendChild(card);
   state.a2ui.push(tool);
   a2uiBadge.style.display = 'inline-flex'; a2uiBadge.textContent = state.a2ui.length;
+  return card;
 }
 function fillA2UICard(card, tool, data, failed) {
   const body = card.querySelector('.a2ui-body');
@@ -871,9 +967,11 @@ function fillA2UICard(card, tool, data, failed) {
   }
   body.innerHTML = renderA2UIBody(tool, data, card.dataset.cid);
   card.style.borderLeftColor = 'var(--accent-green)';
-  const live = !!(data && typeof data.source === 'string' && data.source.indexOf('live') === 0);
+  const src = (data && typeof data.source === 'string') ? data.source : '';
+  const live = src.indexOf('live') === 0;
   card.querySelector('.a2ui-head').insertAdjacentHTML('beforeend',
-    live ? '<span class="proto-badge live">LIVE</span>' : '<span class="proto-badge mcp">SIM</span>');
+    live ? '<span class="proto-badge live">LIVE</span>'
+      : (src === 'user' ? '<span class="proto-badge user">USER</span>' : '<span class="proto-badge mcp">SIM</span>'));
   mountA2UIChart(tool, data, card.dataset.cid);
 }
 function updateA2UICard(tool, data, failed) {

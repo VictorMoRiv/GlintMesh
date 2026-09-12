@@ -1,7 +1,8 @@
 {
   "servers": [
-    { "name": "demo", "script": "mcp_server.py", "label": "Demo (simulated data)" },
+    { "name": "demo", "script": "mcp_server.py", "label": "Demo (simulated data)", "simulated": true },
     { "name": "live", "script": "mcp_yahoo.py", "label": "Live market (Yahoo Finance)" },
-    { "name": "ecb", "script": "mcp_ecb.py", "label": "ECB official rates" }
+    { "name": "ecb", "script": "mcp_ecb.py", "label": "ECB official rates" },
+    { "name": "mydata", "script": "mcp_portfolio.py", "label": "My portfolios (yours)" }
   ]
 }
