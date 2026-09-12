@@ -10,7 +10,7 @@
   <!-- Bootstrap Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
   <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Victor+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <!-- Highlight.js -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
 
@@ -141,7 +141,7 @@
       border-bottom:1px solid var(--glass-border); box-shadow: var(--glass-highlight); gap:14px;
     }
     .logo-mark { width:38px; height:38px; background:var(--gradient-main); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:19px; font-weight:800; color:#fff; flex-shrink:0; box-shadow:0 0 24px var(--glow-cyan), inset 0 1px 0 rgba(255,255,255,0.35); }
-    .logo-text { font-size:26px; font-weight:700; font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; letter-spacing:-0.3px; line-height:1; white-space:nowrap; }
+    .logo-text { font-size:26px; font-weight:700; font-family:'Victor Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; letter-spacing:-0.3px; line-height:1; white-space:nowrap; }
     .logo-sub { font-size:10.5px; font-weight:600; color:var(--text-secondary); letter-spacing:0.8px; text-transform:uppercase; }
     .version-pill { font-size:11px; font-weight:600; color:var(--text-secondary); background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:20px; padding:5px 12px; backdrop-filter:blur(10px); display:flex; align-items:center; gap:6px; white-space:nowrap; box-shadow:var(--glass-highlight); }
     .version-pill i { color:var(--accent-cyan); font-size:12px; }
@@ -183,10 +183,17 @@
     .prompt-row { display:flex; align-items:center; gap:4px; }
     .prompt-row .suggestion-chip { flex:1; min-width:0; }
     .prompt-row .suggestion-chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .prompt-act { width:22px; height:22px; padding:0; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid transparent; border-radius:6px; color:var(--text-muted); font-size:11px; cursor:pointer; opacity:.45; transition:var(--transition); flex-shrink:0; }
-    .prompt-row:hover .prompt-act, .prompt-act.pinned { opacity:1; }
+    .prompt-menu-wrap { position:relative; flex-shrink:0; }
+    .prompt-act { width:24px; height:24px; padding:0; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid transparent; border-radius:6px; color:var(--text-muted); font-size:13px; cursor:pointer; opacity:.55; transition:var(--transition); }
+    .prompt-row:hover .prompt-act { opacity:1; }
     .prompt-act:hover { background:var(--glass-bg-hover); border-color:var(--glass-border-strong); color:var(--text-primary); }
-    .prompt-act.pinned { color:var(--ok-color); }
+    .prompt-menu { display:none; position:absolute; right:0; top:calc(100% + 4px); z-index:40; flex-direction:column; gap:2px; min-width:130px; background:var(--modal-bg); border:1px solid var(--glass-border-strong); border-radius:10px; padding:4px; box-shadow:var(--shadow-card), var(--glass-highlight); }
+    .prompt-menu.open { display:flex; }
+    .prompt-menu-item { display:flex; align-items:center; gap:8px; width:100%; padding:6px 10px; font-size:12px; color:var(--text-secondary); background:transparent; border:none; border-radius:7px; cursor:pointer; text-align:left; }
+    .prompt-menu-item:hover { background:var(--glass-bg-hover); color:var(--text-primary); }
+    .prompt-menu-item.pm-pin.on { color:var(--ok-color); }
+    .prompt-menu-item.pm-del { color:var(--err-color); }
+    .prompt-menu-item.pm-del:hover { background:var(--err-tint-bg); }
     .suggestion-chip { background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 12px; font-size:12px; color:var(--text-secondary); cursor:pointer; transition:var(--transition); display:flex; align-items:center; gap:8px; text-align:left; backdrop-filter:blur(8px); }
     .suggestion-chip:hover { background:var(--tint-blue-hover-bg); border-color:var(--tint-blue-hover-bd); color:var(--text-primary); transform:translateX(2px); }
     .suggestion-chip i { color:var(--accent-cyan); flex-shrink:0; font-size:13px; }
@@ -194,9 +201,11 @@
     /* ─── Content ─── */
     #content-area { flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); backdrop-filter:blur(var(--blur-amount)) saturate(160%); box-shadow:var(--glass-highlight), var(--shadow-card); }
     #tab-bar { display:flex; align-items:center; padding:0 16px; border-bottom:1px solid var(--glass-border); height:48px; gap:4px; flex-shrink:0; }
-    .tab-btn { padding:7px 16px; border-radius:8px; font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:var(--transition); background:transparent; border:none; display:flex; align-items:center; gap:6px; }
+    .tab-btn { padding:7px 10px; border-radius:8px; font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:var(--transition); background:transparent; border:none; display:flex; align-items:center; gap:0; white-space:nowrap; }
+    .tab-btn .tab-label { max-width:0; opacity:0; overflow:hidden; margin-left:0; transition:max-width .25s ease, opacity .2s ease, margin-left .25s ease; }
+    .tab-btn:hover .tab-label, .tab-btn.active .tab-label { max-width:130px; opacity:1; margin-left:6px; }
     .tab-btn:hover { color:var(--text-primary); background:rgba(255,255,255,0.06); } .tab-btn.active { color:var(--accent-cyan); background:var(--tint-cyan-active-bg); border:1px solid var(--tint-cyan-active-bd); }
-    .tab-btn .tab-badge { background:var(--tint-blue-badge-bg); color:var(--accent-blue); font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px; }
+    .tab-btn .tab-badge { background:var(--tint-blue-badge-bg); color:var(--accent-blue); font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px; margin-left:6px; }
     #panel-container { flex:1; overflow:hidden; position:relative; }
     .panel { position:absolute; inset:0; display:none; } .panel.active { display:flex; flex-direction:column; }
     #panel-preview, #panel-a2ui { padding:20px; overflow-y:auto; }
@@ -305,7 +314,7 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
   <style id="user-css"></style>
 </head>
 
-<body data-theme="red-white">
+<body data-theme="red">
 <div id="bg-orb-3"></div>
 <div id="bg-noise"></div>
 <div id="app-shell">
@@ -358,10 +367,10 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
 
     <main id="content-area">
       <div id="tab-bar">
-        <button class="tab-btn active" data-tab="preview"><i class="bi bi-display"></i><span data-i18n="preview">Preview</span></button>
-        <button class="tab-btn" data-tab="a2ui"><i class="bi bi-grid-1x2"></i><span data-i18n="a2ui">A2UI Surface</span><span class="tab-badge" id="a2ui-badge" style="display:none;">0</span></button>
-        <button class="tab-btn" data-tab="code"><i class="bi bi-code-slash"></i><span data-i18n="code">Code</span><span class="tab-badge" id="code-badge" style="display:none;">HTML</span></button>
-        <div class="ms-auto d-flex align-items-center gap-2">
+        <button class="tab-btn active" data-tab="preview" style="margin-left:auto;"><i class="bi bi-display"></i><span class="tab-label" data-i18n="preview">Vista</span></button>
+        <button class="tab-btn" data-tab="a2ui"><i class="bi bi-grid-1x2"></i><span class="tab-label" data-i18n="a2ui">A2UI</span><span class="tab-badge" id="a2ui-badge" style="display:none;">0</span></button>
+        <button class="tab-btn" data-tab="code"><i class="bi bi-code-slash"></i><span class="tab-label" data-i18n="code">Code</span><span class="tab-badge" id="code-badge" style="display:none;">HTML</span></button>
+        <div class="d-flex align-items-center gap-2">
           <div id="progress-bar-container" style="display:none; align-items:center; gap:8px;">
             <div class="thinking-dots"><span></span><span></span><span></span></div>
             <span style="font-size:12px; color:var(--text-secondary);" id="progress-label">Processing...</span>
@@ -458,9 +467,10 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         </div>
         <div id="img-strip" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:12px; padding:8px;"></div>
         <div id="input-wrapper">
+          <button id="style-btn" type="button" title="Interface style" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-brush"></i></button>
+          <textarea id="chat-textarea" rows="1" maxlength="500" data-i18n-ph="placeholder" placeholder="Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'"></textarea>
           <button id="mic-btn" type="button" title="Voice input" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-mic"></i></button>
           <button id="img-btn" type="button" title="Attach chart images (financial charts only)" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-image"></i></button>
-          <textarea id="chat-textarea" rows="1" maxlength="500" data-i18n-ph="placeholder" placeholder="Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'"></textarea>
           <button id="send-btn" title="Generate interface"><i class="bi bi-arrow-up"></i></button>
         </div>
         <input type="file" id="img-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none;" />
@@ -501,14 +511,37 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
   <div id="data-list" style="display:flex; flex-direction:column; gap:8px;"></div>
 </div>
 
+<!-- Interface style modal -->
+<div id="style-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9300;"></div>
+<div id="style-modal" style="display:none; position:fixed; z-index:9301; top:50%; left:50%; transform:translate(-50%,-50%); width:min(540px,94vw); max-height:84vh; overflow-y:auto; background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-brush" style="color:var(--ok-color);"></i> <span data-i18n="style_title">Interface style</span></h5>
+    <button class="btn-glass" id="btn-close-style" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="style_sub">Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).</p>
+  <div id="style-presets" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+    <button class="btn-glass btn-sm" data-preset="minimalist"><span data-i18n="s_min">Minimalist enterprise</span></button>
+    <button class="btn-glass btn-sm" data-preset="glass"><span data-i18n="s_glass">Glassmorphism</span></button>
+    <button class="btn-glass btn-sm" data-preset="dark"><span data-i18n="s_dark">Simple dark</span></button>
+    <button class="btn-glass btn-sm" data-preset="corporate"><span data-i18n="s_corp">Classic corporate</span></button>
+    <button class="btn-glass btn-sm" data-preset="custom"><span data-i18n="s_custom">Custom</span></button>
+  </div>
+  <textarea id="style-textarea" rows="5" maxlength="1000" data-i18n-ph="style_ph" placeholder="E.g.: dark mode with green accents and big numbers..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
+  <div style="display:flex; align-items:center; gap:8px; margin-top:10px;">
+    <span id="style-count" style="font-size:11px; color:var(--text-muted);">0 / 1000</span>
+    <span style="flex:1;"></span>
+    <button class="btn-glass" id="btn-style-reset"><span data-i18n="reset_default">Reset</span></button>
+    <button class="btn-glass" id="btn-style-save" style="border-color:var(--ok-mid-bd); color:var(--ok-color);"><i class="bi bi-check"></i> <span data-i18n="save">Save</span></button>
+  </div>
+</div>
+
 <!-- Settings modal -->
 <div id="settings-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
 <div id="settings-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(520px,94vw); max-height:84vh; overflow-y:auto; background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
   <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-gear" style="color:var(--ok-color);"></i> <span data-i18n="style_title">Interface style</span></h5>
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-gear" style="color:var(--ok-color);"></i> <span data-i18n="settings">Configuración</span></h5>
     <button class="btn-glass" id="btn-close-settings" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
   </div>
-  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="style_sub">Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).</p>
   <div style="margin-bottom:14px;">
     <div style="font-size:12px; font-weight:700; margin-bottom:8px;" data-i18n="options_menu">Options</div>
     <div class="lang-toggle" role="group" aria-label="Language" style="margin-bottom:8px;">
@@ -519,20 +552,6 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
       <button class="btn-glass" id="btn-tools" style="flex:1;" title="View connected MCP tools"><i class="bi bi-tools"></i> <span data-i18n="tools">Tools</span></button>
       <button class="btn-glass" id="btn-clear" style="flex:1;" title="Clear current session"><i class="bi bi-arrow-counterclockwise"></i> <span data-i18n="clear">Clear</span></button>
     </div>
-  </div>
-  <div id="style-presets" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
-    <button class="btn-glass btn-sm" data-preset="minimalist"><span data-i18n="s_min">Minimalist enterprise</span></button>
-    <button class="btn-glass btn-sm" data-preset="glass"><span data-i18n="s_glass">Glassmorphism</span></button>
-    <button class="btn-glass btn-sm" data-preset="dark"><span data-i18n="s_dark">Simple dark</span></button>
-    <button class="btn-glass btn-sm" data-preset="corporate"><span data-i18n="s_corp">Classic corporate</span></button>
-    <button class="btn-glass btn-sm" data-preset="custom"><span data-i18n="s_custom">Custom</span></button>
-  </div>
-  <textarea id="style-textarea" rows="4" maxlength="1000" data-i18n-ph="style_ph" placeholder="E.g.: dark mode with green accents and big numbers..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
-  <div style="display:flex; align-items:center; gap:8px; margin-top:10px;">
-    <span id="style-count" style="font-size:11px; color:var(--text-muted);">0 / 1000</span>
-    <span style="flex:1;"></span>
-    <button class="btn-glass" id="btn-style-reset"><span data-i18n="reset_default">Reset</span></button>
-    <button class="btn-glass" id="btn-style-save" style="border-color:var(--ok-mid-bd); color:var(--ok-color);"><i class="bi bi-check"></i> <span data-i18n="save">Save</span></button>
   </div>
   <hr style="border-color:var(--glass-border); margin:16px 0;" />
   <div style="display:flex; flex-direction:column; gap:10px;">
@@ -561,13 +580,9 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
     </div>
     <div id="theme-grid" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
     <div role="group" aria-label="Dark / light" style="display:flex; gap:6px; margin-bottom:10px;">
+      <button class="btn-glass btn-sm" id="ui-auto" style="flex:1;"><span data-i18n="ui_auto">Auto</span></button>
       <button class="btn-glass btn-sm" id="ui-dark" style="flex:1;"><span data-i18n="ui_dark">Dark</span></button>
       <button class="btn-glass btn-sm" id="ui-light" style="flex:1;"><span data-i18n="ui_light">Light</span></button>
-    </div>
-    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
-      <button class="btn-glass btn-sm" data-snip="blue"><span data-i18n="snip_blue">Blue header</span></button>
-      <button class="btn-glass btn-sm" data-snip="round"><span data-i18n="snip_round">All rounded</span></button>
-      <button class="btn-glass btn-sm" data-snip="compact"><span data-i18n="snip_compact">Compact</span></button>
     </div>
     <textarea id="user-css-textarea" rows="3" maxlength="3000" data-i18n-ph="css_ph" placeholder="Un solo prompt de diseño: pega un snippet o escribe tu CSS..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
     <div style="font-size:11px; color:var(--text-muted); margin-top:6px;" data-i18n="css_hint">Applies live to this app only. Never affects generated interfaces.</div>
@@ -655,6 +670,6 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script type="module" src="/static/app.js?v=9"></script>
+<script type="module" src="/static/app.js?v=12"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ import { readSSE } from './sse.mjs';
 const I18N = {
   es: {
     subtitle: 'A2UI over MCP Interface Mesh', tools: 'Tools', clear: 'Limpiar', export: 'Exportar',
-    preview: 'Vista previa', a2ui: 'Superficie A2UI', code: 'Código', agent_status: 'Estado del agente',
+    preview: 'Vista', a2ui: 'A2UI', code: 'Código', agent_status: 'Estado del agente',
     ready: 'Listo para generar interfaces', tool_empty: 'Las llamadas MCP aparecerán aquí mientras trabaja el agente',
     quick_prompts: 'Prompts rápidos', add_prompt: 'Nuevo prompt rápido', edit_prompt: 'Editar prompt', prompt_need: 'Escribe al menos un texto (ES o EN)', p1: 'Dashboard de portafolio', p2: 'Monitor de índices', p3: 'Analizador de riesgo',
     p4: 'Calculadora de inversión', p5: 'Tablero forex', p6: 'Noticias financieras',
@@ -26,10 +26,10 @@ const I18N = {
     s_min: 'Minimalista empresarial', s_glass: 'Glassmorphism', s_dark: 'Oscuro simple', s_corp: 'Corporativo clásico', s_custom: 'Personalizado', style_saved: 'Estilo guardado',
     model_label: 'Modelo', creativity: 'Creatividad', mode_label: 'Modo', mode_full: 'Interfaz completa', mode_data: 'Solo datos',
     data_mgmt: 'Datos guardados', saved_session: 'Sesión guardada', session_empty: 'Sin sesión guardada', delete: 'Borrar',
-    app_look: 'Apariencia de la app', ui_dark: 'Oscuro', ui_light: 'Claro',
+    app_look: 'Apariencia de la app', ui_auto: 'Automático', ui_dark: 'Oscuro', ui_light: 'Claro',
     css_ph: 'Un solo prompt de diseño: pega un snippet o escribe tu CSS...',
     css_hint: 'Se aplica en vivo solo a esta app. Nunca afecta las interfaces generadas.',
-    reset_look: 'Restablecer apariencia', snip_blue: 'Header azul', snip_round: 'Todo redondeado', snip_compact: 'Compacto',
+    reset_look: 'Restablecer apariencia',
     del_all: 'Borrar todo', keep_imp: 'Conservar importantes', del_everything: 'Borrar todo', cancel: 'Cancelar',
     wipe_title: '¿Borrar datos guardados?', wipe_will_delete: 'Se borrará:', w_session: 'sesión', w_datasets: 'datasets', w_prefs: 'preferencias',
     imp_tag: 'importante', wiped_ok: 'Datos eliminados',
@@ -40,7 +40,7 @@ const I18N = {
   },
   en: {
     subtitle: 'A2UI over MCP Interface Mesh', tools: 'Tools', clear: 'Clear', export: 'Export',
-    preview: 'Preview', a2ui: 'A2UI Surface', code: 'Code', agent_status: 'Agent Status',
+    preview: 'Preview', a2ui: 'A2UI', code: 'Code', agent_status: 'Agent Status',
     ready: 'Ready to generate interfaces', tool_empty: 'MCP tool calls will appear here as the agent works',
     quick_prompts: 'Quick Prompts', add_prompt: 'New quick prompt', edit_prompt: 'Edit prompt', prompt_need: 'Type at least one text (ES or EN)', p1: 'Portfolio dashboard', p2: 'Market indices monitor', p3: 'Credit risk analyzer',
     p4: 'Investment calculator', p5: 'Forex rates board', p6: 'Financial news feed',
@@ -62,10 +62,10 @@ const I18N = {
     s_min: 'Minimalist enterprise', s_glass: 'Glassmorphism', s_dark: 'Simple dark', s_corp: 'Classic corporate', s_custom: 'Custom', style_saved: 'Style saved',
     model_label: 'Model', creativity: 'Creativity', mode_label: 'Mode', mode_full: 'Full interface', mode_data: 'Data only',
     data_mgmt: 'Saved data', saved_session: 'Saved session', session_empty: 'No saved session', delete: 'Delete',
-    app_look: 'App appearance', ui_dark: 'Dark', ui_light: 'Light',
+    app_look: 'App appearance', ui_auto: 'Auto', ui_dark: 'Dark', ui_light: 'Light',
     css_ph: 'One design prompt: paste a snippet or write your CSS...',
     css_hint: 'Applies live to this app only. Never affects generated interfaces.',
-    reset_look: 'Reset look', snip_blue: 'Blue header', snip_round: 'All rounded', snip_compact: 'Compact',
+    reset_look: 'Reset look',
     del_all: 'Delete all', keep_imp: 'Keep important', del_everything: 'Delete everything', cancel: 'Cancel',
     wipe_title: 'Delete saved data?', wipe_will_delete: 'Will delete:', w_session: 'session', w_datasets: 'datasets', w_prefs: 'preferences',
     imp_tag: 'important', wiped_ok: 'Data deleted',
@@ -160,10 +160,16 @@ function renderPrompts() {
   list.innerHTML = sorted.map((p) => {
     const label = promptText(p);
     return '<div class="prompt-row" data-id="' + escapeHtml(p.id) + '">'
-      + '<button class="suggestion-chip" title="' + escapeHtml(label) + '"><i class="bi ' + escapeHtml(p.icon || 'bi-lightning-charge') + '"></i><span>' + escapeHtml(label) + '</span></button>'
-      + '<button class="prompt-act ' + (p.pinned ? 'pinned' : '') + '" data-act="pin" title="Pin / unpin">' + (p.pinned ? '<i class="bi bi-pin-angle-fill"></i>' : '<i class="bi bi-pin-angle"></i>') + '</button>'
-      + '<button class="prompt-act" data-act="edit" title="Edit"><i class="bi bi-pencil"></i></button>'
-      + '<button class="prompt-act" data-act="del" title="Delete"><i class="bi bi-x-lg"></i></button>'
+      + '<button class="suggestion-chip" title="' + escapeHtml(label) + '"' + (p.pinned ? ' style="border-color:var(--ok-soft-bd);"' : '') + '>'
+      + (p.pinned ? '<i class="bi bi-pin-angle-fill" style="color:var(--ok-color);"></i>' : '<i class="bi ' + escapeHtml(p.icon || 'bi-lightning-charge') + '"></i>')
+      + '<span>' + escapeHtml(label) + '</span></button>'
+      + '<div class="prompt-menu-wrap">'
+      + '<button class="prompt-act" data-act="more" title="More options"><i class="bi bi-three-dots-vertical"></i></button>'
+      + '<div class="prompt-menu">'
+      + '<button class="prompt-menu-item pm-pin' + (p.pinned ? ' on' : '') + '" data-act="pin"><i class="bi bi-pin-angle' + (p.pinned ? '-fill' : '') + '"></i>' + (p.pinned ? 'Unpin' : 'Pin') + '</button>'
+      + '<button class="prompt-menu-item" data-act="edit"><i class="bi bi-pencil"></i>Edit</button>'
+      + '<button class="prompt-menu-item pm-del" data-act="del"><i class="bi bi-x-lg"></i>Delete</button>'
+      + '</div></div>'
       + '</div>';
   }).join('');
 }
@@ -176,9 +182,11 @@ promptListEl.addEventListener('click', (e) => {
   const actBtn = e.target.closest('[data-act]');
   if (actBtn) {
     const act = actBtn.dataset.act;
+    if (act === 'more') { togglePromptMenu(row); return; }
     if (act === 'pin') p.pinned = !p.pinned;
     else if (act === 'del') prompts = prompts.filter((x) => x.id !== p.id);
-    else if (act === 'edit') { openPromptEditor(p); return; }
+    else if (act === 'edit') { closeAllPromptMenus(); openPromptEditor(p); return; }
+    closeAllPromptMenus();
     savePrompts();
     renderPrompts();
     return;
@@ -191,6 +199,18 @@ promptListEl.addEventListener('click', (e) => {
   handleSubmit();
 });
 let editingPromptId = null;
+function togglePromptMenu(row) {
+  const menu = row.querySelector('.prompt-menu');
+  const isOpen = menu && menu.classList.contains('open');
+  closeAllPromptMenus();
+  if (!isOpen && menu) menu.classList.add('open');
+}
+function closeAllPromptMenus() {
+  document.querySelectorAll('#prompt-list .prompt-menu.open').forEach((m) => m.classList.remove('open'));
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#prompt-list')) closeAllPromptMenus();
+});
 function openPromptEditor(p) {
   editingPromptId = p ? p.id : null;
   $('prompt-modal-title').textContent = p ? t('edit_prompt') : t('add_prompt');
@@ -320,6 +340,8 @@ function persistSettings() {
 }
 function refreshSettingsDot() {
   $('settings-dot').style.display = (stylePrompt && stylePreset !== 'minimalist') ? 'block' : 'none';
+  const sb = $('style-btn');
+  if (sb) sb.style.color = (stylePrompt && stylePreset !== 'minimalist') ? 'var(--ok-color)' : 'var(--text-secondary)';
 }
 function syncSettingsUI() {
   const ta = $('style-textarea');
@@ -346,7 +368,16 @@ function openSettings() {
   $('settings-overlay').style.display = 'block';
 }
 function closeSettings() { $('settings-modal').style.display = 'none'; $('settings-overlay').style.display = 'none'; }
+function openStyle() {
+  syncSettingsUI();
+  $('style-modal').style.display = 'block';
+  $('style-overlay').style.display = 'block';
+}
+function closeStyle() { $('style-modal').style.display = 'none'; $('style-overlay').style.display = 'none'; }
 $('btn-settings').addEventListener('click', openSettings);
+$('style-btn').addEventListener('click', openStyle);
+$('btn-close-style').addEventListener('click', closeStyle);
+$('style-overlay').addEventListener('click', closeStyle);
 $('btn-close-settings').addEventListener('click', closeSettings);
 $('settings-overlay').addEventListener('click', closeSettings);
 document.querySelectorAll('#style-presets [data-preset]').forEach((b) => b.addEventListener('click', () => {
@@ -377,14 +408,14 @@ $('btn-style-save').addEventListener('click', () => {
   if (!stylePrompt) stylePreset = 'minimalist';
   persistSettings();
   refreshSettingsDot();
-  closeSettings();
+  closeStyle();
   showToast(t('style_saved'), 'success');
 });
 $('btn-style-reset').addEventListener('click', () => {
   stylePrompt = ''; stylePreset = 'minimalist'; genModel = ''; genTemp = 0.7; genMode = 'full';
   try { localStorage.removeItem(STYLE_KEY); } catch (e) {}
   refreshSettingsDot();
-  closeSettings();
+  closeStyle();
 });
 function refreshSettingsSession() {
   let session = null;
@@ -473,7 +504,7 @@ async function wipeAll(keepImportant) {
   if (!keepImportant) {
     try { localStorage.removeItem(STYLE_KEY); localStorage.removeItem(UI_KEY); localStorage.removeItem(IMPORTANT_KEY); } catch (e) {}
     stylePrompt = ''; stylePreset = 'minimalist'; genModel = ''; genTemp = 0.7; genMode = 'full';
-    themeId = 'red-white'; userCss = '';
+themeId = 'red'; uiScheme = 'auto'; userCss = '';
     applyTheme(); refreshSettingsDot();
   }
   if (activeDataset && !(keepImportant && imp.datasets.includes(activeDataset.id))) {
@@ -491,41 +522,48 @@ refreshSettingsDot();
 // ─── App appearance: themes (JSON) + custom CSS (app shell only) ────────────
 const UI_KEY = 'glintmesh-ui-v3';
 let THEMES = [];
-let themeId = 'red-white', userCss = '';
+let themeId = 'red', uiScheme = 'auto', userCss = '';
 try {
   const savedUI = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
   if (savedUI) {
     if (typeof savedUI.theme === 'string' && savedUI.theme) themeId = savedUI.theme;
+    if (savedUI.scheme === 'dark' || savedUI.scheme === 'light' || savedUI.scheme === 'auto') uiScheme = savedUI.scheme;
     userCss = (savedUI.css || '').slice(0, 3000);
   }
 } catch (e) {}
+const schemeMq = window.matchMedia('(prefers-color-scheme: dark)');
+function effScheme() { return uiScheme === 'auto' ? (schemeMq.matches ? 'dark' : 'light') : (uiScheme === 'dark' ? 'dark' : 'light'); }
 function cv(name, fallback = '') {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
 }
 function getTheme(id) { return THEMES.find((t) => t.id === id) || null; }
 function applyTheme() {
+  const scheme = effScheme();
   document.body.dataset.theme = themeId;
+  document.body.dataset.scheme = scheme;
   const root = document.documentElement;
   for (const p of Array.from(root.style)) { if (p.startsWith('--')) root.style.removeProperty(p); }
   const theme = getTheme(themeId);
-  if (theme && theme.vars) {
-    Object.entries(theme.vars).forEach(([k, v]) => { if (v !== '' && v != null) root.style.setProperty(k, v); });
+  const part = theme ? (theme[scheme] || theme.light || theme.dark) : null;
+  if (part && part.vars) {
+    Object.entries(part.vars).forEach(([k, v]) => { if (v !== '' && v != null) root.style.setProperty(k, v); });
   }
   const tag = $('theme-css');
-  if (tag) tag.textContent = (theme && theme.css) || '';
+  if (tag) tag.textContent = (part && part.css) || '';
   const u = $('user-css');
   if (u) u.textContent = userCss;
   document.querySelectorAll('#theme-grid [data-theme]').forEach((b) => {
     b.style.borderColor = b.dataset.theme === themeId ? cv('--ok-active-bd') : '';
   });
-  if ($('ui-dark')) $('ui-dark').style.borderColor = themeId === 'dark' ? cv('--ok-active-bd') : '';
-  if ($('ui-light')) $('ui-light').style.borderColor = themeId === 'light' ? cv('--ok-active-bd') : '';
+  if ($('ui-dark')) $('ui-dark').style.borderColor = uiScheme === 'dark' ? cv('--ok-active-bd') : '';
+  if ($('ui-light')) $('ui-light').style.borderColor = uiScheme === 'light' ? cv('--ok-active-bd') : '';
+  if ($('ui-auto')) $('ui-auto').style.borderColor = uiScheme === 'auto' ? cv('--ok-active-bd') : '';
   const ta = $('user-css-textarea');
   if (ta && document.activeElement !== ta) ta.value = userCss;
 }
 function persistUI() {
-  try { localStorage.setItem(UI_KEY, JSON.stringify({ theme: themeId, css: userCss })); } catch (e) {}
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ theme: themeId, scheme: uiScheme, css: userCss })); } catch (e) {}
 }
 function buildThemeGrid() {
   const grid = $('theme-grid');
@@ -535,31 +573,18 @@ function buildThemeGrid() {
     themeId = b.dataset.theme; persistUI(); applyTheme();
   }));
 }
-$('ui-dark').addEventListener('click', () => { themeId = getTheme('dark') ? 'dark' : (THEMES[0]?.id || 'red-white'); persistUI(); applyTheme(); });
-$('ui-light').addEventListener('click', () => { themeId = getTheme('light') ? 'light' : (THEMES[0]?.id || 'red-white'); persistUI(); applyTheme(); });
+$('ui-auto').addEventListener('click', () => { uiScheme = 'auto'; persistUI(); applyTheme(); });
+$('ui-dark').addEventListener('click', () => { uiScheme = 'dark'; persistUI(); applyTheme(); });
+$('ui-light').addEventListener('click', () => { uiScheme = 'light'; persistUI(); applyTheme(); });
+schemeMq.addEventListener('change', () => { if (uiScheme === 'auto') applyTheme(); });
 $('user-css-textarea').addEventListener('input', (e) => {
   userCss = e.target.value.slice(0, 3000);
   const tag = $('user-css');
   if (tag) tag.textContent = userCss;
   persistUI();
 });
-const CSS_SNIPS = {
-  blue: '#header { background:linear-gradient(135deg,#1e3a8a,#1e40af) !important; }',
-  round: '#sidebar, #content-area, .tool-card, .feature-card, #input-wrapper, .a2ui-card { border-radius:20px !important; }',
-  compact: '#header { height:52px !important; } #main-body { padding:8px !important; gap:8px !important; } .feature-card { padding:10px 8px !important; }',
-};
-document.querySelectorAll('[data-snip]').forEach((b) => b.addEventListener('click', () => {
-  const snip = CSS_SNIPS[b.dataset.snip];
-  if (!snip) return;
-  const ta = $('user-css-textarea');
-  ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + snip;
-  userCss = ta.value.slice(0, 3000);
-  const tag = $('user-css');
-  if (tag) tag.textContent = userCss;
-  persistUI();
-}));
 $('btn-reset-look').addEventListener('click', () => {
-  themeId = 'red-white'; userCss = '';
+  themeId = 'red'; uiScheme = 'auto'; userCss = '';
   persistUI(); applyTheme();
   showToast(t('style_saved'), 'success');
 });
@@ -570,7 +595,7 @@ async function loadThemes() {
     const data = await res.json();
     if (Array.isArray(data.themes)) THEMES = data.themes;
   } catch (e) { THEMES = []; }
-  if (!THEMES.some((t) => t.id === themeId)) themeId = THEMES[0]?.id || 'red-white';
+  if (!THEMES.some((t) => t.id === themeId)) themeId = THEMES[0]?.id || 'red';
   buildThemeGrid();
   applyTheme();
 }
