@@ -1,85 +1,63 @@
-# FinFlow AI - Financial Interface Generator
+# GlintMesh / FinFlow AI
 
-## Descripcion
+Generador de interfaces financieras con una UI web, FastAPI y Gemini. El usuario escribe en la interfaz y recibe la respuesta progresivamente. Las solicitudes de dashboards generan HTML que se muestra en Preview, Code y Export; los saludos reciben una respuesta de texto.
 
-FinFlow AI es un agente de inteligencia artificial que genera interfaces web financieras en tiempo real. El usuario describe en lenguaje natural la interfaz que necesita (dashboard de portafolio, monitor de mercado, analizador de riesgo, etc.) y el agente utiliza herramientas MCP para obtener datos financieros reales y generar HTML/CSS/JS completo e interactivo.
+## Ejecutar en Windows (PowerShell)
 
-## Arquitectura
+Requiere Python 3.11 o posterior.
 
-```
-[Frontend Bootstrap 5 + Glassmorphism]
-        |  SSE Streaming
-        v
-[FastAPI Backend - main.py]
-        |  Tool calls
-        v
-[MCP Server - mcp_server.py]  <-->  [Google Gemini 2.0 Flash]
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-## Herramientas MCP disponibles
+Edita `.env` y configura tu clave de Google AI Studio. Si ya tienes `.env`, conserva tu archivo en lugar de ejecutar `Copy-Item`.
 
-| Herramienta | Descripcion |
-|---|---|
-| `get_stock_quote` | Cotizacion en tiempo real de acciones (precio, cambio, volumen) |
-| `get_portfolio_summary` | Resumen de portafolio de inversiones con P&L |
-| `get_market_indices` | Indices principales: S&P 500, NASDAQ, Dow Jones, IPC Mexico |
-| `analyze_credit_risk` | Analisis de riesgo crediticio con score y recomendacion |
-| `get_historical_prices` | Datos historicos OHLCV para graficas |
-| `get_financial_news` | Titulares financieros con sentimiento de mercado |
-| `calculate_compound_interest` | Calculadora de interes compuesto con proyecciones |
-| `get_forex_rates` | Tipos de cambio FX con multiples monedas |
-
-## Instalacion
-
-```bash
-# 1. Clonar/descargar el proyecto
-cd HackMTY
-
-# 2. Instalar dependencias
-pip install -r requirements.txt
-
-# 3. Configurar API Key de Gemini
-# Editar .env y agregar tu clave:
-GEMINI_API_KEY=tu_clave_aqui
-
-# 4. Iniciar el servidor
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-# 5. Abrir en el navegador
-# http://localhost:8000
+```dotenv
+GEMINI_API_KEY=tu_clave_de_google_ai_studio
+GEMINI_MODEL=gemini-3.6-flash
+MCP_ENABLED=false
 ```
 
-## Obtencion de Gemini API Key
+El modelo predeterminado es el que se verificó con el sandbox. Puedes cambiarlo usando `GEMINI_MODEL`. La clave se lee exclusivamente en el backend; `.env` está excluido de Git. No pongas claves en `static/`.
 
-1. Ir a https://aistudio.google.com/app/apikey
-2. Crear una nueva API key
-3. Copiarla en el archivo `.env`
-
-## Uso
-
-1. Abre http://localhost:8000 en tu navegador
-2. Usa los **Quick Prompts** del sidebar o escribe tu propia solicitud
-3. El agente procesara la solicitud, llamara a las herramientas MCP necesarias y generara la interfaz
-4. Ve el resultado en la pestana **Preview** o el codigo en **Code**
-5. Exporta la interfaz generada con el boton **Export**
-
-## Ejemplos de prompts
-
-- "Show me a real-time portfolio dashboard for AAPL, MSFT, NVDA and TSLA stocks"
-- "Generate a market indices monitor showing S&P 500, NASDAQ and Dow Jones"
-- "Create a credit risk analysis dashboard for a $250,000 mortgage"
-- "Build a compound interest calculator for $10,000 over 30 years at 8%"
-- "Show me a forex exchange rates board with USD as base currency"
-- "Generate a financial news feed with market sentiment indicators"
-
-## Estructura del proyecto
-
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
-HackMTY/
-   main.py          # FastAPI backend + agente Gemini
-   mcp_server.py    # MCP Server con herramientas financieras
-   requirements.txt # Dependencias Python
-   .env             # Configuracion (API keys)
-   static/
-      index.html   # Frontend con glassmorfismo + Bootstrap 5
+
+Abre **http://127.0.0.1:8000**. Usa el servidor Python para abrir la UI, ya que necesita los endpoints del backend.
+
+1. Escribe `Hola` y comprueba la respuesta de Gemini.
+2. Pide `Genera una tarjeta de utilidad neta de $482,300, variación +12%, con datos de ejemplo`.
+3. Comprueba Preview, Code y Export. Clear cancela una generación en curso y limpia la interfaz.
+
+Las solicitudes son independientes; la UI todavía no guarda historial entre generaciones. El chat de consola del sandbox conserva su propia conversación mientras está abierto.
+
+## MCP opcional
+
+La UI funciona sin MCP con `MCP_ENABLED=false`. Para probar las ocho herramientas locales de demostración, cambia a `MCP_ENABLED=true` y reinicia el backend. Se usa el SDK oficial MCP v1 (`mcp>=1.20,<2`) y su servidor FastMCP.
+
+Las cotizaciones, carteras, índices, noticias y tipos de cambio de `mcp_server.py` son **simulados**, no datos financieros en vivo. Gemini recibe esta indicación y debe etiquetar los ejemplos. No se incluyen conexiones a proveedores reales pendientes de implementación.
+
+Con MCP activado, el backend obtiene los esquemas, entrega las herramientas a Gemini, ejecuta las llamadas por MCP y devuelve sus resultados a Gemini. La UI muestra las llamadas y los resultados. Si el MCP habilitado no está disponible, se muestra un error; puedes desactivarlo para seguir usando Gemini.
+
+## API
+
+- `GET /`: interfaz web.
+- `POST /api/generate`: JSON `{"message":"..."}` de 1 a 500 caracteres; respuesta SSE con eventos `status`, `text_chunk`, `tool_call`, `tool_result`, `error` y `done`.
+- `GET /api/tools`: herramientas disponibles; lista vacía cuando MCP está desactivado.
+- `GET /health`: modelo y presencia de configuración, sin exponer la clave. No realiza una llamada de validación a Gemini.
+
+Los errores de validación usan HTTP 422; una clave sin configurar usa HTTP 503. Los errores ocurridos durante la generación usan el evento SSE `error` y no emiten `done`.
+
+## Pruebas
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+node --test tests/sse.test.mjs
 ```
+
+Las pruebas del backend simulan Gemini y comprueban también el servidor MCP local por stdio. Las pruebas de JavaScript verifican que el streaming conserve eventos y caracteres UTF-8 cuando llegan fragmentados. No necesitan una clave real ni consumen cuota de Gemini.
+
+`gemini-sandbox/` conserva el chat de consola y los cinco ejemplos independientes (`npm run chat`, `npm run step1` a `step5`). No es necesario ejecutar Node.js para usar la UI web.

@@ -1,15 +1,15 @@
 """
 MCP Server for FinFlow AI - Financial Interface Generator
 Provides tools for financial data retrieval and analysis.
-Compatible with mcp >= 2.0 using the MCPServer.tool() decorator approach.
+Uses the official MCP Python SDK v1 FastMCP server.
 """
 
 import json
 import random
 from datetime import datetime, timedelta
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 
-server = MCPServer("finflow-financial-tools")
+server = FastMCP("finflow-financial-tools")
 
 
 # ─── MCP Tool Definitions (using .tool() decorator) ──────────────────────────
