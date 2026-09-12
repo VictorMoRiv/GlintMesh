@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinFlow AI &mdash; Financial Interface Generator</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- Highlight.js -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+
+  <style>
+    /* ─── CSS Custom Properties ───────────────────────────────────── */
+    :root {
+      --bg-deep:        #070b1f;
+      --bg-mid:         #0d1235;
+      --bg-surface:     #111840;
+      --glass-bg:       rgba(255, 255, 255, 0.04);
+      --glass-bg-hover: rgba(255, 255, 255, 0.07);
+      --glass-border:   rgba(255, 255, 255, 0.10);
+      --glass-border-strong: rgba(255, 255, 255, 0.18);
+      --blur-amount:    20px;
+      --accent-blue:    #4f8ef7;
+      --accent-cyan:    #00d4ff;
+      --accent-purple:  #7b5ea7;
+      --accent-green:   #10b981;
+      --accent-red:     #ef4444;
+      --accent-amber:   #f59e0b;
+      --text-primary:   #f0f4ff;
+      --text-secondary: rgba(240, 244, 255, 0.55);
+      --text-muted:     rgba(240, 244, 255, 0.30);
+      --gradient-main:  linear-gradient(135deg, #4f8ef7 0%, #7b5ea7 50%, #00d4ff 100%);
+      --gradient-bg:    linear-gradient(160deg, var(--bg-deep) 0%, var(--bg-mid) 60%, #0f1a45 100%);
+      --sidebar-width:  320px;
+      --header-height:  64px;
+      --radius-lg:      16px;
+      --radius-md:      12px;
+      --radius-sm:      8px;
+      --shadow-glow:    0 0 40px rgba(79, 142, 247, 0.15);
+      --shadow-card:    0 8px 32px rgba(0, 0, 0, 0.4);
+      --transition:     all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ─── Base ────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--gradient-bg);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Animated background orbs */
+    body::before,
+    body::after {
+      content: '';
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(80px);
+      opacity: 0.25;
+      animation: orbFloat 20s ease-in-out infinite alternate;
+    }
+    body::before {
+      width: 700px; height: 700px;
+      background: radial-gradient(circle, #4f8ef7 0%, transparent 70%);
+      top: -200px; left: -200px;
+    }
+    body::after {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, #7b5ea7 0%, transparent 70%);
+      bottom: -100px; right: -100px;
+      animation-delay: -10s;
+    }
+    @keyframes orbFloat {
+      from { transform: translate(0, 0) scale(1); }
+      to   { transform: translate(40px, 30px) scale(1.08); }
+    }
+
+    /* ─── Layout ──────────────────────────────────────────────────── */
+    #app-shell {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ─── Header ──────────────────────────────────────────────────── */
+    #header {
+      height: var(--header-height);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      background: rgba(7, 11, 31, 0.6);
+      backdrop-filter: blur(var(--blur-amount));
+      -webkit-backdrop-filter: blur(var(--blur-amount));
+      border-bottom: 1px solid var(--glass-border);
+      gap: 16px;
+    }
+
+    .logo-mark {
+      width: 36px; height: 36px;
+      background: var(--gradient-main);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: #fff;
+      flex-shrink: 0;
+      box-shadow: 0 0 20px rgba(79, 142, 247, 0.5);
+    }
+
+    .logo-text {
+      font-size: 18px;
+      font-weight: 700;
+      background: var(--gradient-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.3px;
+    }
+
+    .logo-sub {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    #header .badge-live {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: var(--accent-green);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      display: flex; align-items: center; gap: 5px;
+      letter-spacing: 0.3px;
+    }
+
+    .live-dot {
+      width: 6px; height: 6px;
+      background: var(--accent-green);
+      border-radius: 50%;
+      animation: blink 1.4s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.2; }
+    }
+
+    #header .header-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-glass {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: var(--transition);
+      backdrop-filter: blur(10px);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+    .btn-glass:hover {
+      background: var(--glass-bg-hover);
+      border-color: var(--glass-border-strong);
+      color: var(--text-primary);
+    }
+
+    /* ─── Main Body ───────────────────────────────────────────────── */
+    #main-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ─── Sidebar ─────────────────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-width);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: rgba(7, 11, 31, 0.5);
+      backdrop-filter: blur(var(--blur-amount));
+      -webkit-backdrop-filter: blur(var(--blur-amount));
+      border-right: 1px solid var(--glass-border);
+      overflow: hidden;
+    }
+
+    /* Agent status bar */
+    #agent-status-bar {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 52px;
+    }
+
+    .agent-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    #status-text {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    #status-text.active { color: var(--accent-cyan); }
+    #status-text.error  { color: var(--accent-red); }
+    #status-text.success { color: var(--accent-green); }
+
+    /* Tool calls feed */
+    #tool-feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    #tool-feed::-webkit-scrollbar { width: 4px; }
+    #tool-feed::-webkit-scrollbar-track { background: transparent; }
+    #tool-feed::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+    }
+
+    .tool-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 12px;
+      animation: slideInLeft 0.3s ease;
+      transition: var(--transition);
+    }
+    .tool-card:hover {
+      background: var(--glass-bg-hover);
+      border-color: var(--glass-border-strong);
+    }
+
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .tool-card .tool-name {
+      font-weight: 600;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .tool-card .tool-data {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      color: var(--text-secondary);
+      word-break: break-all;
+      line-height: 1.5;
+    }
+
+    .tool-status-icon {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px;
+      flex-shrink: 0;
+    }
+    .tool-status-icon.calling { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); }
+    .tool-status-icon.done    { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); }
+    .tool-status-icon.error   { background: rgba(239, 68, 68, 0.2);  color: var(--accent-red); }
+
+    /* Prompt suggestions */
+    #prompt-suggestions {
+      padding: 12px;
+      border-top: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .suggestion-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .suggestion-chip {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-align: left;
+    }
+    .suggestion-chip:hover {
+      background: rgba(79, 142, 247, 0.12);
+      border-color: rgba(79, 142, 247, 0.35);
+      color: var(--text-primary);
+    }
+    .suggestion-chip i { color: var(--accent-blue); flex-shrink: 0; font-size: 13px; }
+
+    /* ─── Content Area ────────────────────────────────────────────── */
+    #content-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Tab bar */
+    #tab-bar {
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      background: rgba(7, 11, 31, 0.4);
+      border-bottom: 1px solid var(--glass-border);
+      height: 46px;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      padding: 6px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+      background: transparent;
+      border: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab-btn:hover { color: var(--text-primary); background: var(--glass-bg); }
+    .tab-btn.active {
+      color: var(--accent-blue);
+      background: rgba(79, 142, 247, 0.12);
+    }
+
+    .tab-btn .tab-badge {
+      background: rgba(79, 142, 247, 0.2);
+      color: var(--accent-blue);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+
+    /* Panel container */
+    #panel-container {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .panel {
+      position: absolute;
+      inset: 0;
+      display: none;
+    }
+    .panel.active { display: flex; flex-direction: column; }
+
+    /* ─── Preview Panel ───────────────────────────────────────────── */
+    #panel-preview {
+      padding: 20px;
+      overflow-y: auto;
+    }
+    #panel-preview::-webkit-scrollbar { width: 6px; }
+    #panel-preview::-webkit-scrollbar-track { background: transparent; }
+    #panel-preview::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+    /* Welcome state */
+    #welcome-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .welcome-icon {
+      width: 80px; height: 80px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-glow);
+      backdrop-filter: blur(10px);
+    }
+
+    .welcome-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      background: var(--gradient-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+    }
+
+    .welcome-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      max-width: 420px;
+      line-height: 1.7;
+      margin-bottom: 32px;
+    }
+
+    /* Feature cards on welcome */
+    .welcome-features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      width: 100%;
+      max-width: 540px;
+      margin-bottom: 32px;
+    }
+
+    .feature-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      padding: 16px 12px;
+      text-align: center;
+      transition: var(--transition);
+      backdrop-filter: blur(10px);
+    }
+    .feature-card:hover {
+      background: var(--glass-bg-hover);
+      border-color: var(--glass-border-strong);
+      transform: translateY(-2px);
+    }
+    .feature-card .fc-icon {
+      font-size: 22px;
+      color: var(--accent-blue);
+      margin-bottom: 8px;
+    }
+    .feature-card .fc-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+    .feature-card .fc-desc {
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* Generated interface container */
+    #generated-wrapper {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    #generated-wrapper.visible { display: flex; }
+
+    .agent-message-bubble {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      backdrop-filter: blur(10px);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      animation: fadeInUp 0.4s ease;
+    }
+
+    .agent-avatar {
+      width: 28px; height: 28px;
+      background: var(--gradient-main);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* iframe preview */
+    #preview-frame-container {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow-card);
+      animation: fadeInUp 0.5s ease 0.1s both;
+    }
+
+    .preview-topbar {
+      display: flex;
+      align-items: center;
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--glass-border);
+      gap: 8px;
+    }
+
+    .preview-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .preview-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+    }
+    .dot-red    { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green  { background: #28c840; }
+
+    .preview-url-bar {
+      flex: 1;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--glass-border);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .btn-preview-action {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+    .btn-preview-action:hover { color: var(--text-primary); background: var(--glass-bg-hover); }
+
+    #preview-iframe {
+      width: 100%;
+      border: none;
+      background: #fff;
+      min-height: 500px;
+      display: block;
+    }
+
+    /* ─── Code Panel ──────────────────────────────────────────────── */
+    #panel-code {
+      overflow: hidden;
+    }
+
+    #code-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+    #code-container::-webkit-scrollbar { width: 6px; }
+    #code-container::-webkit-scrollbar-track { background: transparent; }
+    #code-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+    #code-output {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-all;
+      min-height: 200px;
+    }
+
+    #code-output.streaming {
+      border-color: rgba(79, 142, 247, 0.35);
+      box-shadow: 0 0 20px rgba(79, 142, 247, 0.08);
+    }
+
+    /* ─── Chat Input ──────────────────────────────────────────────── */
+    #chat-input-area {
+      padding: 16px 20px;
+      background: rgba(7, 11, 31, 0.6);
+      backdrop-filter: blur(var(--blur-amount));
+      border-top: 1px solid var(--glass-border);
+      flex-shrink: 0;
+    }
+
+    #input-wrapper {
+      display: flex;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      transition: var(--transition);
+    }
+    #input-wrapper:focus-within {
+      border-color: rgba(79, 142, 247, 0.5);
+      box-shadow: 0 0 0 3px rgba(79, 142, 247, 0.08);
+    }
+
+    #chat-textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      resize: none;
+      min-height: 22px;
+      max-height: 120px;
+      line-height: 1.5;
+      caret-color: var(--accent-blue);
+    }
+    #chat-textarea::placeholder { color: var(--text-muted); }
+
+    #send-btn {
+      background: var(--gradient-main);
+      border: none;
+      border-radius: var(--radius-sm);
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: var(--transition);
+      flex-shrink: 0;
+      align-self: flex-end;
+      box-shadow: 0 4px 12px rgba(79, 142, 247, 0.35);
+    }
+    #send-btn:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(79, 142, 247, 0.5); }
+    #send-btn:active { transform: scale(0.96); }
+    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    #send-btn i { color: #fff; font-size: 16px; }
+
+    #input-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ─── Loading Skeleton ────────────────────────────────────────── */
+    .skeleton {
+      background: linear-gradient(90deg,
+        rgba(255,255,255,0.04) 0%,
+        rgba(255,255,255,0.08) 50%,
+        rgba(255,255,255,0.04) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.6s ease-in-out infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer {
+      from { background-position: 200% 0; }
+      to   { background-position: -200% 0; }
+    }
+
+    /* ─── Thinking indicator ──────────────────────────────────────── */
+    .thinking-dots {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .thinking-dots span {
+      width: 5px; height: 5px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40%           { transform: scale(1); opacity: 1; }
+    }
+
+    /* ─── Toast notifications ─────────────────────────────────────── */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast-item {
+      background: rgba(13, 18, 53, 0.9);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: toastIn 0.3s ease;
+      min-width: 240px;
+      max-width: 320px;
+      box-shadow: var(--shadow-card);
+    }
+    .toast-item.success { border-color: rgba(16, 185, 129, 0.4); }
+    .toast-item.error   { border-color: rgba(239, 68, 68, 0.4); }
+    .toast-item.info    { border-color: rgba(79, 142, 247, 0.4); }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(20px) scale(0.95); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* ─── Scrollbar ───────────────────────────────────────────────── */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.1) transparent;
+    }
+
+    /* ─── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      :root { --sidebar-width: 0px; }
+      #sidebar { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+<div id="app-shell">
+
+  <!-- ─── Header ───────────────────────────────────────────────────────── -->
+  <header id="header">
+    <div class="logo-mark">F</div>
+    <div>
+      <div class="logo-text">FinFlow AI</div>
+      <div class="logo-sub">Financial Interface Generator</div>
+    </div>
+    <div class="badge-live ms-3">
+      <div class="live-dot"></div>
+      MCP Connected
+    </div>
+    <div class="header-actions">
+      <button class="btn-glass" id="btn-tools" title="View available MCP tools">
+        <i class="bi bi-tools"></i>
+        Tools
+      </button>
+      <button class="btn-glass" id="btn-clear" title="Clear current session">
+        <i class="bi bi-arrow-counterclockwise"></i>
+        Clear
+      </button>
+      <a class="btn-glass" href="#" id="btn-export" title="Export generated HTML">
+        <i class="bi bi-download"></i>
+        Export
+      </a>
+    </div>
+  </header>
+
+  <!-- ─── Main Body ────────────────────────────────────────────────────── -->
+  <div id="main-body">
+
+    <!-- ─── Sidebar ──────────────────────────────────────────────────── -->
+    <aside id="sidebar">
+
+      <!-- Agent Status -->
+      <div id="agent-status-bar">
+        <div class="agent-icon">
+          <i class="bi bi-cpu-fill" style="color:#fff; font-size:15px;"></i>
+        </div>
+        <div>
+          <div style="font-size:11px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">Agent Status</div>
+          <div id="status-text">Ready to generate interfaces</div>
+        </div>
+      </div>
+
+      <!-- Tool Feed -->
+      <div id="tool-feed">
+        <div style="text-align:center; padding:30px 16px; color:var(--text-muted); font-size:12px; line-height:1.6;">
+          <i class="bi bi-diagram-3" style="font-size:24px; display:block; margin-bottom:10px; color:var(--text-muted);"></i>
+          MCP tool calls will appear here as the agent works
+        </div>
+      </div>
+
+      <!-- Prompt Suggestions -->
+      <div id="prompt-suggestions">
+        <div class="suggestion-label">Quick Prompts</div>
+        <button class="suggestion-chip" data-prompt="Show me a real-time portfolio dashboard for AAPL, MSFT, NVDA and TSLA stocks">
+          <i class="bi bi-pie-chart-fill"></i>
+          Portfolio dashboard
+        </button>
+        <button class="suggestion-chip" data-prompt="Generate a market indices monitor showing S&P 500, NASDAQ, Dow Jones and IPC Mexico with live data">
+          <i class="bi bi-graph-up-arrow"></i>
+          Market indices monitor
+        </button>
+        <button class="suggestion-chip" data-prompt="Create a credit risk analysis dashboard for a $250,000 mortgage application with income $75,000">
+          <i class="bi bi-shield-check"></i>
+          Credit risk analyzer
+        </button>
+        <button class="suggestion-chip" data-prompt="Build a compound interest calculator showing growth projections for $10,000 over 30 years at 8% annual rate">
+          <i class="bi bi-calculator"></i>
+          Investment calculator
+        </button>
+        <button class="suggestion-chip" data-prompt="Show me a forex exchange rates dashboard with USD as base currency and historical BTC price chart">
+          <i class="bi bi-currency-exchange"></i>
+          Forex rates board
+        </button>
+        <button class="suggestion-chip" data-prompt="Generate a financial news feed dashboard with market sentiment indicators and latest headlines">
+          <i class="bi bi-newspaper"></i>
+          Financial news feed
+        </button>
+      </div>
+
+    </aside>
+
+    <!-- ─── Content Area ─────────────────────────────────────────────── -->
+    <main id="content-area">
+
+      <!-- Tab Bar -->
+      <div id="tab-bar">
+        <button class="tab-btn active" data-tab="preview">
+          <i class="bi bi-display"></i>
+          Preview
+        </button>
+        <button class="tab-btn" data-tab="code">
+          <i class="bi bi-code-slash"></i>
+          Code
+          <span class="tab-badge" id="code-badge" style="display:none;">HTML</span>
+        </button>
+
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <div id="progress-bar-container" style="display:none; align-items:center; gap:8px;">
+            <div class="thinking-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span style="font-size:12px; color:var(--text-secondary);" id="progress-label">Processing...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel Container -->
+      <div id="panel-container">
+
+        <!-- Preview Panel -->
+        <div class="panel active" id="panel-preview">
+
+          <!-- Welcome State -->
+          <div id="welcome-state">
+            <div class="welcome-icon">
+              <i class="bi bi-bar-chart-fill" style="color:var(--accent-blue);"></i>
+            </div>
+            <div class="welcome-title">Financial Interface Generator</div>
+            <div class="welcome-desc">
+              Describe any financial dashboard, report, or tool in plain English.
+              FinFlow AI will use real market data to generate a complete, interactive interface in seconds.
+            </div>
+
+            <div class="welcome-features">
+              <div class="feature-card">
+                <div class="fc-icon"><i class="bi bi-graph-up"></i></div>
+                <div class="fc-title">Live Market Data</div>
+                <div class="fc-desc">Real-time quotes, indices, and price history</div>
+              </div>
+              <div class="feature-card">
+                <div class="fc-icon"><i class="bi bi-cpu"></i></div>
+                <div class="fc-title">MCP Tools</div>
+                <div class="fc-desc">8 financial analysis tools powered by MCP</div>
+              </div>
+              <div class="feature-card">
+                <div class="fc-icon"><i class="bi bi-gem"></i></div>
+                <div class="fc-title">Gemini AI</div>
+                <div class="fc-desc">Powered by Google Gemini 2.0 Flash</div>
+              </div>
+            </div>
+
+            <div style="font-size:13px; color:var(--text-muted);">
+              Type a request below or choose a quick prompt from the sidebar
+            </div>
+          </div>
+
+          <!-- Generated Wrapper -->
+          <div id="generated-wrapper">
+            <div class="agent-message-bubble" id="agent-bubble" style="display:none;">
+              <div class="agent-avatar">
+                <i class="bi bi-robot" style="color:#fff; font-size:12px;"></i>
+              </div>
+              <div id="agent-bubble-text"></div>
+            </div>
+            <div id="preview-frame-container" style="display:none;">
+              <div class="preview-topbar">
+                <div class="preview-dots">
+                  <div class="preview-dot dot-red"></div>
+                  <div class="preview-dot dot-yellow"></div>
+                  <div class="preview-dot dot-green"></div>
+                </div>
+                <div class="preview-url-bar">finflow://generated-interface</div>
+                <button class="btn-preview-action" id="btn-reload-preview" title="Reload preview">
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
+                <button class="btn-preview-action" id="btn-fullscreen" title="Open in new tab">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+              </div>
+              <iframe id="preview-iframe" title="Generated Financial Interface" sandbox="allow-scripts allow-same-origin"></iframe>
+            </div>
+          </div>
+        </div>
+
+        <!-- Code Panel -->
+        <div class="panel" id="panel-code">
+          <div id="code-container">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <div style="font-size:13px; font-weight:600; color:var(--text-secondary); display:flex; align-items:center; gap:8px;">
+                <i class="bi bi-file-earmark-code" style="color:var(--accent-blue);"></i>
+                Generated HTML
+              </div>
+              <button class="btn-glass btn-sm" id="btn-copy-code" style="display:none;">
+                <i class="bi bi-clipboard"></i> Copy
+              </button>
+            </div>
+            <pre id="code-output"><code style="color:var(--text-muted); font-size:12px;">// Generated code will appear here...</code></pre>
+          </div>
+        </div>
+
+      </div><!-- /panel-container -->
+
+      <!-- Chat Input -->
+      <div id="chat-input-area">
+        <div id="input-wrapper">
+          <textarea
+            id="chat-textarea"
+            rows="1"
+            placeholder="Describe a financial interface... e.g. 'Build me a real-time stock portfolio dashboard'"
+          ></textarea>
+          <button id="send-btn" title="Generate interface">
+            <i class="bi bi-arrow-up"></i>
+          </button>
+        </div>
+        <div id="input-footer">
+          <span>FinFlow AI may produce simulated financial data for demonstration purposes</span>
+          <span id="char-count">0 / 500</span>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+<script>
+// ─── State ──────────────────────────────────────────────────────────────────
+const state = {
+  isGenerating: false,
+  generatedHTML: '',
+  agentMessage: '',
+  toolCalls: [],
+};
+
+// ─── DOM References ──────────────────────────────────────────────────────────
+const chatTextarea     = document.getElementById('chat-textarea');
+const sendBtn          = document.getElementById('send-btn');
+const toolFeed         = document.getElementById('tool-feed');
+const statusText       = document.getElementById('status-text');
+const welcomeState     = document.getElementById('welcome-state');
+const generatedWrapper = document.getElementById('generated-wrapper');
+const agentBubble      = document.getElementById('agent-bubble');
+const agentBubbleText  = document.getElementById('agent-bubble-text');
+const previewContainer = document.getElementById('preview-frame-container');
+const previewIframe    = document.getElementById('preview-iframe');
+const codeOutput       = document.getElementById('code-output');
+const progressBar      = document.getElementById('progress-bar-container');
+const progressLabel    = document.getElementById('progress-label');
+const charCount        = document.getElementById('char-count');
+const codeBadge        = document.getElementById('code-badge');
+const btnCopyCode      = document.getElementById('btn-copy-code');
+
+// ─── Tab Navigation ──────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`panel-${tab}`).classList.add('active');
+  });
+});
+
+// ─── Textarea Auto-resize ────────────────────────────────────────────────────
+chatTextarea.addEventListener('input', () => {
+  chatTextarea.style.height = 'auto';
+  chatTextarea.style.height = Math.min(chatTextarea.scrollHeight, 120) + 'px';
+  const len = chatTextarea.value.length;
+  charCount.textContent = `${len} / 500`;
+  if (len > 450) charCount.style.color = 'var(--accent-amber)';
+  else charCount.style.color = 'var(--text-muted)';
+});
+
+chatTextarea.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    handleSubmit();
+  }
+});
+
+sendBtn.addEventListener('click', handleSubmit);
+
+// ─── Suggestion Chips ────────────────────────────────────────────────────────
+document.querySelectorAll('.suggestion-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    chatTextarea.value = chip.dataset.prompt;
+    chatTextarea.dispatchEvent(new Event('input'));
+    chatTextarea.focus();
+    handleSubmit();
+  });
+});
+
+// ─── Clear Button ────────────────────────────────────────────────────────────
+document.getElementById('btn-clear').addEventListener('click', () => {
+  state.generatedHTML = '';
+  state.agentMessage = '';
+  state.toolCalls = [];
+  welcomeState.style.display = 'flex';
+  generatedWrapper.classList.remove('visible');
+  agentBubble.style.display = 'none';
+  previewContainer.style.display = 'none';
+  agentBubbleText.textContent = '';
+  codeOutput.innerHTML = '<code style="color:var(--text-muted); font-size:12px;">// Generated code will appear here...</code>';
+  codeBadge.style.display = 'none';
+  btnCopyCode.style.display = 'none';
+  toolFeed.innerHTML = `<div style="text-align:center; padding:30px 16px; color:var(--text-muted); font-size:12px; line-height:1.6;">
+    <i class="bi bi-diagram-3" style="font-size:24px; display:block; margin-bottom:10px; color:var(--text-muted);"></i>
+    MCP tool calls will appear here as the agent works
+  </div>`;
+  setStatus('Ready to generate interfaces', '');
+  chatTextarea.value = '';
+  charCount.textContent = '0 / 500';
+  showToast('Session cleared', 'info');
+});
+
+// ─── Export Button ───────────────────────────────────────────────────────────
+document.getElementById('btn-export').addEventListener('click', e => {
+  e.preventDefault();
+  if (!state.generatedHTML) { showToast('No interface to export yet', 'error'); return; }
+  const blob = new Blob([state.generatedHTML], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `finflow-interface-${Date.now()}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Interface exported', 'success');
+});
+
+// ─── Tools Button ────────────────────────────────────────────────────────────
+document.getElementById('btn-tools').addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/tools');
+    const data = await res.json();
+    if (data.tools) {
+      showToast(`${data.tools.length} MCP tools available`, 'info');
+    }
+  } catch(e) {
+    showToast('Could not fetch tools', 'error');
+  }
+});
+
+// ─── Preview Actions ─────────────────────────────────────────────────────────
+document.getElementById('btn-reload-preview').addEventListener('click', () => {
+  if (state.generatedHTML) renderPreview(state.generatedHTML);
+});
+
+document.getElementById('btn-fullscreen').addEventListener('click', () => {
+  if (!state.generatedHTML) return;
+  const blob = new Blob([state.generatedHTML], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+});
+
+// ─── Copy Code ───────────────────────────────────────────────────────────────
+btnCopyCode.addEventListener('click', async () => {
+  if (!state.generatedHTML) return;
+  await navigator.clipboard.writeText(state.generatedHTML);
+  showToast('Code copied to clipboard', 'success');
+});
+
+// ─── Main Submit Handler ─────────────────────────────────────────────────────
+async function handleSubmit() {
+  const message = chatTextarea.value.trim();
+  if (!message || state.isGenerating) return;
+
+  state.isGenerating = true;
+  state.generatedHTML = '';
+  state.agentMessage = '';
+  state.toolCalls = [];
+
+  // UI Setup
+  chatTextarea.value = '';
+  chatTextarea.style.height = 'auto';
+  charCount.textContent = '0 / 500';
+  sendBtn.disabled = true;
+  progressBar.style.display = 'flex';
+
+  // Show generated wrapper, hide welcome
+  welcomeState.style.display = 'none';
+  generatedWrapper.classList.add('visible');
+  agentBubble.style.display = 'flex';
+  agentBubbleText.innerHTML = '<div class="thinking-dots"><span></span><span></span><span></span></div>';
+
+  // Reset tool feed
+  toolFeed.innerHTML = '';
+
+  // Reset code output
+  codeOutput.textContent = '';
+  codeBadge.style.display = 'none';
+  btnCopyCode.style.display = 'none';
+
+  previewContainer.style.display = 'none';
+  setStatus('Analyzing request...', 'active');
+
+  let fullText = '';
+  let htmlBuffer = '';
+  let inHTML = false;
+
+  try {
+    const response = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const rawChunk = decoder.decode(value, { stream: true });
+      const lines = rawChunk.split('\n');
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          handleSSEEvent(event, fullText, htmlBuffer, inHTML);
+
+          if (event.type === 'text_chunk') {
+            fullText += event.content;
+            // Update code view in real time
+            codeOutput.textContent = fullText;
+
+            // Check for HTML extraction
+            const htmlStart = fullText.indexOf('```html');
+            const htmlEnd   = fullText.lastIndexOf('```');
+            if (htmlStart !== -1) {
+              const extractStart = htmlStart + 7;
+              if (htmlEnd > extractStart) {
+                state.generatedHTML = fullText.slice(extractStart, htmlEnd).trim();
+              } else {
+                state.generatedHTML = fullText.slice(extractStart).trim();
+              }
+              // Update agent bubble with text before HTML
+              const preHTML = fullText.slice(0, htmlStart).trim();
+              if (preHTML) {
+                agentBubbleText.textContent = preHTML;
+              }
+            }
+
+          } else if (event.type === 'done') {
+            finalize(fullText);
+          }
+        } catch(e) {
+          // Ignore JSON parse errors for partial chunks
+        }
+      }
+    }
+  } catch(err) {
+    setStatus('Connection error', 'error');
+    agentBubbleText.textContent = 'Network error: ' + err.message;
+    showToast('Connection failed', 'error');
+  } finally {
+    state.isGenerating = false;
+    sendBtn.disabled = false;
+    progressBar.style.display = 'none';
+  }
+}
+
+function handleSSEEvent(event) {
+  switch(event.type) {
+    case 'status':
+      setStatus(event.content, 'active');
+      progressLabel.textContent = event.content;
+      break;
+
+    case 'tool_call':
+      setStatus(event.content, 'active');
+      progressLabel.textContent = event.content;
+      addToolCard(event.content.replace('Fetching ', '').replace('...', ''), 'calling');
+      break;
+
+    case 'tool_result': {
+      // Update last tool card to done
+      const cards = toolFeed.querySelectorAll('.tool-card');
+      if (cards.length > 0) {
+        const last = cards[cards.length - 1];
+        const icon = last.querySelector('.tool-status-icon');
+        if (icon) {
+          icon.className = 'tool-status-icon done';
+          icon.innerHTML = '<i class="bi bi-check"></i>';
+        }
+        // Show brief data summary
+        const dataDiv = last.querySelector('.tool-data');
+        if (dataDiv && event.data) {
+          const snippet = JSON.stringify(event.data).slice(0, 120) + '...';
+          dataDiv.textContent = snippet;
+        }
+      }
+      break;
+    }
+
+    case 'error':
+      setStatus(event.content, 'error');
+      agentBubbleText.textContent = 'Error: ' + event.content;
+      showToast(event.content, 'error');
+      break;
+  }
+}
+
+function addToolCard(name, status = 'calling') {
+  const card = document.createElement('div');
+  card.className = 'tool-card';
+
+  const iconClass = status === 'calling' ? 'calling' : 'done';
+  const iconContent = status === 'calling'
+    ? '<i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite;"></i>'
+    : '<i class="bi bi-check"></i>';
+
+  card.innerHTML = `
+    <div class="tool-name">
+      <div class="tool-status-icon ${iconClass}">${iconContent}</div>
+      ${name.replace(/_/g, ' ')}
+    </div>
+    <div class="tool-data">Calling MCP tool...</div>
+  `;
+
+  // Style for spin animation
+  const styleEl = document.getElementById('spin-style');
+  if (!styleEl) {
+    const s = document.createElement('style');
+    s.id = 'spin-style';
+    s.textContent = '@keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }';
+    document.head.appendChild(s);
+  }
+
+  // Remove empty state if present
+  const emptyState = toolFeed.querySelector('div[style*="text-align"]');
+  if (emptyState) emptyState.remove();
+
+  toolFeed.appendChild(card);
+  toolFeed.scrollTop = toolFeed.scrollHeight;
+  return card;
+}
+
+function finalize(fullText) {
+  // Extract agent message (before ```html)
+  const htmlStart = fullText.indexOf('```html');
+  if (htmlStart !== -1) {
+    const preText = fullText.slice(0, htmlStart).trim();
+    if (preText) {
+      agentBubbleText.textContent = preText;
+    } else {
+      agentBubble.style.display = 'none';
+    }
+
+    // Extract HTML
+    const extractStart = htmlStart + 7;
+    const htmlEnd = fullText.lastIndexOf('```');
+    if (htmlEnd > extractStart) {
+      state.generatedHTML = fullText.slice(extractStart, htmlEnd).trim();
+    } else {
+      state.generatedHTML = fullText.slice(extractStart).trim();
+    }
+
+    // Render preview
+    if (state.generatedHTML) {
+      renderPreview(state.generatedHTML);
+      codeBadge.style.display = 'inline-flex';
+      btnCopyCode.style.display = 'flex';
+      showToast('Interface generated successfully', 'success');
+    }
+  } else {
+    // No HTML block, just show text
+    agentBubbleText.textContent = fullText;
+    showToast('Response received', 'info');
+  }
+
+  // Final code display with syntax highlighting
+  if (state.generatedHTML) {
+    try {
+      const highlighted = hljs.highlight(state.generatedHTML, { language: 'html' }).value;
+      codeOutput.innerHTML = highlighted;
+    } catch(e) {
+      codeOutput.textContent = state.generatedHTML;
+    }
+  }
+
+  setStatus('Interface generated successfully', 'success');
+  progressBar.style.display = 'none';
+}
+
+function renderPreview(html) {
+  previewContainer.style.display = 'block';
+  const iframe = previewIframe;
+  iframe.srcdoc = html;
+
+  // Adjust iframe height after load
+  iframe.onload = () => {
+    try {
+      const body = iframe.contentDocument.body;
+      const h = Math.max(body.scrollHeight, 500);
+      iframe.style.height = Math.min(h, 800) + 'px';
+    } catch(e) {
+      iframe.style.height = '600px';
+    }
+  };
+}
+
+function setStatus(text, type = '') {
+  statusText.textContent = text;
+  statusText.className = type ? `active ${type}` : '';
+}
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const icons = { success: 'bi-check-circle-fill', error: 'bi-x-circle-fill', info: 'bi-info-circle-fill' };
+  const colors = { success: 'var(--accent-green)', error: 'var(--accent-red)', info: 'var(--accent-blue)' };
+
+  const toast = document.createElement('div');
+  toast.className = `toast-item ${type}`;
+  toast.innerHTML = `
+    <i class="bi ${icons[type] || icons.info}" style="color:${colors[type] || colors.info}; font-size:16px; flex-shrink:0;"></i>
+    <span>${message}</span>
+  `;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+</script>
+</body>
+</html>
