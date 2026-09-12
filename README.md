@@ -49,7 +49,9 @@ Con MCP activado, el backend obtiene los esquemas, entrega las herramientas a Ge
 ## API
 
 - `GET /`: interfaz web.
-- `POST /api/generate`: JSON `{"message":"...", "lang":"es"|"en", "context":"optional prior-turn summary"}`; `message` 1-500 chars, `context` hasta 2000. Respuesta SSE con eventos `status`, `text_chunk`, `tool_call`, `tool_result`, `error` y `done`. La UI guarda la última sesión en localStorage y reenvía su resumen como `context` para continuidad.
+- `POST /api/datasets`: sube CSV o JSON propio (máx 2 MB) a `uploads/`; devuelve columnas, filas y muestra.
+- `GET /api/datasets`: datasets subidos con muestra de filas.
+- `POST /api/generate`: JSON `{"message":"...", "lang":"es"|"en", "context":"resumen opcional", "dataset_id":"opcional"}`; `message` 1-500 chars, `context` hasta 2000. Respuesta SSE con eventos `status`, `text_chunk`, `tool_call`, `tool_result`, `error` y `done`. La UI guarda la última sesión en localStorage y reenvía su resumen como `context` para continuidad.
 - `GET /api/tools`: herramientas disponibles; lista vacía cuando MCP está desactivado.
 - `GET /health`: modelo y presencia de configuración, sin exponer la clave. No realiza una llamada de validación a Gemini.
 
