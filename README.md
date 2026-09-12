@@ -32,6 +32,11 @@ El modelo predeterminado es el que se verificó con el sandbox. Puedes cambiarlo
 
 Abre **http://127.0.0.1:8000**. Usa el servidor Python para abrir la UI, ya que necesita los endpoints del backend.
 
+```powershell
+docker build -t glintmesh .
+docker run --rm -p 8000:8000 -e GEMINI_API_KEY=tu_clave -e MCP_ENABLED=true glintmesh
+```
+
 1. Escribe `Hola` y comprueba la respuesta de Gemini.
 2. Pide `Genera una tarjeta de utilidad neta de $482,300, variación +12%, con datos de ejemplo`.
 3. Comprueba Preview, Code y Export. Clear cancela una generación en curso y limpia la interfaz.
@@ -51,6 +56,9 @@ Con MCP activado, el backend obtiene los esquemas, entrega las herramientas a Ge
 - `GET /`: interfaz web.
 - `POST /api/datasets`: sube CSV o JSON propio (máx 2 MB) a `uploads/`; devuelve columnas, filas y muestra.
 - `GET /api/datasets`: datasets subidos con muestra de filas.
+- `DELETE /api/datasets/{id}`: borra un dataset.
+- `POST /api/tool-call`: re-ejecuta un MCP sin Gemini (refresh gratis de superficies A2UI).
+- `POST /api/share` + `GET /share/{id}`: link compartible de una interfaz generada.
 - `POST /api/generate`: JSON `{"message":"...", "lang":"es"|"en", "context":"resumen opcional", "dataset_id":"opcional"}`; `message` 1-500 chars, `context` hasta 2000. Respuesta SSE con eventos `status`, `text_chunk`, `tool_call`, `tool_result`, `error` y `done`. La UI guarda la última sesión en localStorage y reenvía su resumen como `context` para continuidad.
 - `GET /api/tools`: herramientas disponibles; lista vacía cuando MCP está desactivado.
 - `GET /health`: modelo y presencia de configuración, sin exponer la clave. No realiza una llamada de validación a Gemini.

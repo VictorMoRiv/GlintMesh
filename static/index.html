@@ -238,6 +238,26 @@ background:rgba(0,0,0,.35); border:1px solid var(--glass-border); border-radius:
 max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
     .proto-badge.live { background:rgba(16,185,129,.14); border-color:rgba(52,211,153,.45); color:#34d399; }
   </style>
+  <style id="variant-light">
+    /* ─── App theme: light ─── */
+    body.variant-light { --text-primary:#0f172a; --text-secondary:rgba(15,23,42,0.66); --text-muted:rgba(15,23,42,0.42);
+      --glass-bg:#ffffff; --glass-bg-hover:#f1f5f9; --glass-border:#e2e8f0; --glass-border-strong:#cbd5e1;
+      --accent-blue:#4f46e5; --accent-cyan:#4f46e5; --accent-purple:#7c3aed;
+      --gradient-main:linear-gradient(135deg,#4f46e5,#7c3aed); --shadow-card:0 1px 3px rgba(15,23,42,0.08); --shadow-glow:none; }
+    body.variant-light { background:#f4f6fb; }
+    body.variant-light #header, body.variant-light #sidebar, body.variant-light #content-area { background:#ffffff; box-shadow:var(--shadow-card); border-color:var(--glass-border); }
+    body.variant-light #main-body { padding:16px; gap:16px; }
+    body.variant-light .tool-card, body.variant-light .feature-card, body.variant-light .suggestion-chip,
+    body.variant-light .agent-message-bubble, body.variant-light .a2ui-card, body.variant-light #input-wrapper,
+    body.variant-light .btn-glass, body.variant-light .version-pill, body.variant-light .lang-toggle { box-shadow:none; }
+    body.variant-light .logo-mark, body.variant-light #send-btn, body.variant-light .agent-icon, body.variant-light .agent-avatar { box-shadow:none; }
+    body.variant-light #code-output { background:#0f172a; color:#e2e8f0; }
+    body.variant-light .a2ui-metric { background:#f8fafc; }
+    body.variant-light .a2ui-table td { border-bottom-color:#eef2f7; }
+    body.variant-light .tab-btn.active { color:#4f46e5; background:rgba(79,70,229,0.08); border-color:rgba(79,70,229,0.25); }
+    body.variant-light .a2ui-riskbar { background:#e2e8f0; }
+  </style>
+  <style id="user-css"></style>
 </head>
 
 <body class="variant-dark">
@@ -383,6 +403,7 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
                 <div class="preview-url-bar">glintmesh://a2ui-surface</div>
                 <button class="btn-preview-action" id="btn-reload-preview" title="Reload preview"><i class="bi bi-arrow-clockwise"></i></button>
                 <button class="btn-preview-action" id="btn-fullscreen" title="Open in new tab"><i class="bi bi-box-arrow-up-right"></i></button>
+                <button class="btn-preview-action" id="btn-share" title="Copy shareable link"><i class="bi bi-link-45deg"></i></button>
               </div>
               <iframe id="preview-iframe" title="Generated Financial Interface" sandbox="allow-scripts"></iframe>
             </div>
@@ -390,6 +411,13 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         </div>
 
         <div class="panel" id="panel-a2ui">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <button class="btn-glass btn-sm" id="btn-refresh-data"><i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh_data">Refresh data</span></button>
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); cursor:pointer;">
+              <input type="checkbox" id="auto-refresh" style="accent-color:#34d399;" /> <span data-i18n="auto_60">Auto 60s</span>
+            </label>
+            <span id="refresh-note" style="font-size:11px; color:var(--text-muted);"></span>
+          </div>
           <div id="a2ui-feed" style="display:flex; flex-direction:column; gap:12px; padding:4px;">
             <div id="a2ui-empty" style="text-align:center; padding:60px 20px; color:var(--text-muted); font-size:13px;">
               <i class="bi bi-grid-1x2" style="font-size:28px; display:block; margin-bottom:12px;"></i>
@@ -499,6 +527,16 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         <button class="btn-glass btn-sm" id="mode-data" style="flex:1;"><span data-i18n="mode_data">Data only</span></button>
       </div>
     </div>
+  </div>
+  <hr style="border-color:var(--glass-border); margin:16px 0;" />
+  <div>
+    <div style="font-size:12px; font-weight:700; margin-bottom:8px;" data-i18n="app_look">App appearance</div>
+    <div style="display:flex; gap:6px; margin-bottom:10px;">
+      <button class="btn-glass btn-sm" id="ui-dark" style="flex:1;"><span data-i18n="ui_dark">Dark</span></button>
+      <button class="btn-glass btn-sm" id="ui-light" style="flex:1;"><span data-i18n="ui_light">Light</span></button>
+    </div>
+    <textarea id="user-css-textarea" rows="3" maxlength="3000" data-i18n-ph="css_ph" placeholder="Custom CSS for the app shell, e.g.: #header { background:#111; }" style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:6px;" data-i18n="css_hint">Applies live to this app only. Never affects generated interfaces.</div>
   </div>
   <hr style="border-color:var(--glass-border); margin:16px 0;" />
   <div>

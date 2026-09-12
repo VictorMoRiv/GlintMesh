@@ -19,11 +19,16 @@ const I18N = {
     data: 'Datos', datasets_title: 'Mis datasets', datasets_sub: 'Sube CSV o JSON (máx 2 MB). El agente construye la interfaz con tus datos.',
     upload: 'Subir', use: 'Usar', using: 'Usando', no_datasets: 'Aún no hay datasets. Sube tu primer CSV o JSON.',
     uploaded_ok: 'Dataset cargado', upload_fail: 'No se pudo cargar el dataset', rows: 'filas',
+    refresh_data: 'Actualizar datos', auto_60: 'Auto 60s', refreshed_ok: 'Datos actualizados sin gastar cuota', refresh_fail: 'No se pudo actualizar',
+    link_copied: 'Link copiado al portapapeles', share_fail: 'No se pudo crear el link',
     settings: 'Configuración', style_title: 'Estilo de interfaces', style_sub: 'Describe cómo quieres que se vean todas tus interfaces. Vacío = minimalista empresarial (default).',
     style_ph: 'Ej.: modo oscuro con acentos verdes y números grandes...', save: 'Guardar', reset_default: 'Restablecer',
     s_min: 'Minimalista empresarial', s_glass: 'Glassmorphism', s_dark: 'Oscuro simple', s_corp: 'Corporativo clásico', s_custom: 'Personalizado', style_saved: 'Estilo guardado',
     model_label: 'Modelo', creativity: 'Creatividad', mode_label: 'Modo', mode_full: 'Interfaz completa', mode_data: 'Solo datos',
     data_mgmt: 'Datos guardados', saved_session: 'Sesión guardada', session_empty: 'Sin sesión guardada', delete: 'Borrar',
+    app_look: 'Apariencia de la app', ui_dark: 'Oscuro', ui_light: 'Claro',
+    css_ph: 'CSS propio para la app, ej.: #header { background:#111; }',
+    css_hint: 'Se aplica en vivo solo a esta app. Nunca afecta las interfaces generadas.',
     session_cleared: 'Sesión limpiada', no_export: 'Aún no hay interfaz para exportar', exported: 'Interfaz exportada',
     copied: 'Código copiado', mcp_disabled: 'MCP desactivado. Gemini funciona sin herramientas.', mcp_error: 'No se pudieron obtener herramientas',
     waiting: 'Esperando a Gemini...', generating: 'Generando interfaz...', analyzing: 'Analizando solicitud...',
@@ -46,11 +51,16 @@ const I18N = {
     data: 'Data', datasets_title: 'My datasets', datasets_sub: 'Upload CSV or JSON (max 2 MB). The agent builds the interface from your data.',
     upload: 'Upload', use: 'Use', using: 'Using', no_datasets: 'No datasets yet. Upload your first CSV or JSON.',
     uploaded_ok: 'Dataset uploaded', upload_fail: 'Could not upload dataset', rows: 'rows',
+    refresh_data: 'Refresh data', auto_60: 'Auto 60s', refreshed_ok: 'Data refreshed with no quota used', refresh_fail: 'Could not refresh',
+    link_copied: 'Link copied to clipboard', share_fail: 'Could not create link',
     settings: 'Settings', style_title: 'Interface style', style_sub: 'Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).',
     style_ph: 'E.g.: dark mode with green accents and big numbers...', save: 'Save', reset_default: 'Reset',
     s_min: 'Minimalist enterprise', s_glass: 'Glassmorphism', s_dark: 'Simple dark', s_corp: 'Classic corporate', s_custom: 'Custom', style_saved: 'Style saved',
     model_label: 'Model', creativity: 'Creativity', mode_label: 'Mode', mode_full: 'Full interface', mode_data: 'Data only',
     data_mgmt: 'Saved data', saved_session: 'Saved session', session_empty: 'No saved session', delete: 'Delete',
+    app_look: 'App appearance', ui_dark: 'Dark', ui_light: 'Light',
+    css_ph: 'Custom CSS for the app shell, e.g.: #header { background:#111; }',
+    css_hint: 'Applies live to this app only. Never affects generated interfaces.',
     session_cleared: 'Session cleared', no_export: 'No interface to export yet', exported: 'Interface exported',
     copied: 'Code copied to clipboard', mcp_disabled: 'MCP is disabled. Gemini works without tools.', mcp_error: 'Could not fetch tools',
     waiting: 'Waiting for Gemini...', generating: 'Generating interface...', analyzing: 'Analyzing request...',
@@ -126,6 +136,9 @@ $('btn-clear').addEventListener('click', () => {
   destroyA2UICharts();
   sendBtn.disabled = false; progressBar.style.display = 'none'; previewIframe.srcdoc = '';
   state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.lastSummary = '';
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  const autoBox = $('auto-refresh');
+  if (autoBox) autoBox.checked = false;
   activeDataset = null; refreshDatasetChip();
   try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   welcomeState.style.display = 'flex'; generatedWrapper.classList.remove('visible');
@@ -320,6 +333,40 @@ async function refreshSettingsDatasets() {
 }
 refreshSettingsDot();
 
+// ─── App appearance: theme + custom CSS (app shell only) ────────────────────
+const UI_KEY = 'glintmesh-ui-v1';
+let uiTheme = 'variant-dark', userCss = '';
+try {
+  const savedUI = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
+  if (savedUI) {
+    if (savedUI.theme === 'variant-light' || savedUI.theme === 'variant-dark') uiTheme = savedUI.theme;
+    userCss = (savedUI.css || '').slice(0, 3000);
+  }
+} catch (e) {}
+function applyUI() {
+  document.body.classList.remove('variant-dark', 'variant-light');
+  document.body.classList.add(uiTheme);
+  const tag = $('user-css');
+  if (tag) tag.textContent = userCss;
+  const d = $('ui-dark'), l = $('ui-light');
+  if (d) d.style.borderColor = uiTheme === 'variant-dark' ? 'rgba(52,211,153,0.5)' : '';
+  if (l) l.style.borderColor = uiTheme === 'variant-light' ? 'rgba(52,211,153,0.5)' : '';
+  const ta = $('user-css-textarea');
+  if (ta && document.activeElement !== ta) ta.value = userCss;
+}
+function persistUI() {
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ theme: uiTheme, css: userCss })); } catch (e) {}
+}
+$('ui-dark').addEventListener('click', () => { uiTheme = 'variant-dark'; persistUI(); applyUI(); });
+$('ui-light').addEventListener('click', () => { uiTheme = 'variant-light'; persistUI(); applyUI(); });
+$('user-css-textarea').addEventListener('input', (e) => {
+  userCss = e.target.value.slice(0, 3000);
+  const tag = $('user-css');
+  if (tag) tag.textContent = userCss;
+  persistUI();
+});
+applyUI();
+
 // ─── User datasets ──────────────────────────────────────────────────────────
 let activeDataset = null;
 const dataModal = $('data-modal'), dataOverlay = $('data-overlay');
@@ -375,6 +422,7 @@ $('btn-upload').addEventListener('click', async () => {
 });
 
 function addDatasetPreviewCard(ds) {
+
   const empty = $('a2ui-empty'); if (empty) empty.remove();
   const cols = (ds.columns || []).slice(0, 6);
   const head = cols.map((c) => '<th>' + escapeHtml(c) + '</th>').join('');
@@ -388,6 +436,47 @@ function addDatasetPreviewCard(ds) {
   a2uiBadge.style.display = 'inline-flex'; a2uiBadge.textContent = state.a2ui.length;
 }
 
+// ─── A2UI refresh without Gemini (replays stored MCP tool calls) ─────────────
+let refreshTimer = null;
+function latestA2UICard(tool) {
+  const cards = a2uiFeed.querySelectorAll('.a2ui-card');
+  for (let i = cards.length - 1; i >= 0; i--) {
+    if (cards[i].dataset.tool === tool && !cards[i].dataset.pending) return cards[i];
+  }
+  return null;
+}
+async function refreshA2UIData() {
+  if (!state.toolCalls.length) return;
+  const seen = new Set();
+  let ok = 0, fail = 0;
+  for (const call of state.toolCalls) {
+    if (seen.has(call.tool)) continue;
+    seen.add(call.tool);
+    try {
+      const res = await fetch('/api/tool-call', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool: call.tool, args: call.args || {} }),
+      });
+      if (!res.ok) throw new Error('tool failed');
+      const data = await res.json();
+      const card = latestA2UICard(call.tool);
+      if (card) { fillA2UICard(card, call.tool, data.data, false); ok++; }
+    } catch (e) { fail++; }
+  }
+  const note = $('refresh-note');
+  if (note) {
+    note.textContent = new Date().toLocaleTimeString() + ' · ' + (fail ? t('refresh_fail') : t('refreshed_ok'));
+    setTimeout(() => { if (note) note.textContent = ''; }, 4000);
+  }
+  if (ok && !fail) showToast(t('refreshed_ok'), 'success');
+  else if (fail) showToast(t('refresh_fail'), 'error');
+}
+$('btn-refresh-data').addEventListener('click', refreshA2UIData);
+$('auto-refresh').addEventListener('change', (e) => {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  if (e.target.checked) refreshTimer = setInterval(refreshA2UIData, 60000);
+});
+
 $('btn-reload-preview').addEventListener('click', () => { if (state.generatedHTML) renderPreview(state.generatedHTML); });
 $('btn-fullscreen').addEventListener('click', () => {
   if (!state.generatedHTML) return;
@@ -399,6 +488,19 @@ $('btn-fullscreen').addEventListener('click', () => {
 btnCopyCode.addEventListener('click', async () => {
   if (!state.generatedHTML) return;
   await navigator.clipboard.writeText(state.generatedHTML); showToast(t('copied'), 'success');
+});
+$('btn-share').addEventListener('click', async () => {
+  if (!state.generatedHTML) return;
+  try {
+    const res = await fetch('/api/share', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html: state.generatedHTML }),
+    });
+    if (!res.ok) throw new Error('share failed');
+    const data = await res.json();
+    await navigator.clipboard.writeText(window.location.origin + data.url);
+    showToast(t('link_copied'), 'success');
+  } catch (e) { showToast(t('share_fail'), 'error'); }
 });
 
 // ─── Submit ─────────────────────────────────────────────────────────────────
@@ -483,7 +585,7 @@ function destroyA2UICharts() {
 function a2uiKind(tool) {
   if (/historical|history|prices/i.test(tool)) return 'chart';
   if (/compound/i.test(tool)) return 'chart';
-  if (/portfolio|forex|_fx|indices|news/i.test(tool)) return 'table';
+  if (/portfolio|forex|_fx|indices|news|ecb/i.test(tool)) return 'table';
   if (/credit/i.test(tool)) return 'gauge';
   return 'card';
 }
@@ -572,7 +674,7 @@ function renderA2UIBody(tool, data, cid) {
     if (tool === 'get_financial_news') return a2uiNews(data);
     if (tool === 'analyze_credit_risk') return a2uiCredit(data);
     if (tool === 'calculate_compound_interest') return a2uiCompound(data, cid);
-    if (tool === 'get_forex_rates' || tool === 'get_live_fx') return a2uiForex(data);
+    if (tool === 'get_forex_rates' || tool === 'get_live_fx' || tool === 'get_ecb_rates') return a2uiForex(data);
     return '<pre class="a2ui-raw">' + esc(JSON.stringify(data, null, 2)).slice(0, 4000) + '</pre>';
   } catch (e) {
     return '<div class="a2ui-mlabel">Could not render this surface</div>';
@@ -604,7 +706,9 @@ function handleSSEEvent(event) {
     case 'status': setStatus(event.content, 'active'); progressLabel.textContent = event.content; break;
     case 'tool_call': {
       setStatus(event.content, 'active'); progressLabel.textContent = event.content;
-      const name = event.content.replace('Fetching ', '').replace('...', '');
+      const name = event.tool || event.content.replace('Fetching ', '').replace('...', '');
+      const args = (event.args && typeof event.args === 'object') ? event.args : {};
+      state.toolCalls.push({ tool: name, args });
       addToolCard(name, 'calling');
       addA2UICard(name, null, true);
       break;
@@ -663,7 +767,7 @@ function fillA2UICard(card, tool, data, failed) {
   }
   body.innerHTML = renderA2UIBody(tool, data, card.dataset.cid);
   card.style.borderLeftColor = 'var(--accent-green)';
-  const live = data && data.source === 'live';
+  const live = !!(data && typeof data.source === 'string' && data.source.indexOf('live') === 0);
   card.querySelector('.a2ui-head').insertAdjacentHTML('beforeend',
     live ? '<span class="proto-badge live">LIVE</span>' : '<span class="proto-badge mcp">SIM</span>');
   mountA2UIChart(tool, data, card.dataset.cid);

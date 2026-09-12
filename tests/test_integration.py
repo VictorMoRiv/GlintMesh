@@ -162,6 +162,18 @@ class IntegrationTests(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertEqual(self.client.post("/api/generate", json={"message": "Hi", **bad}).status_code, 422)
 
+    def test_direct_tool_call(self):
+        tool = SimpleNamespace(name="get_live_quote", description="Live", input_schema={})
+        with patch.object(main, "MCP_ENABLED", True), patch.object(
+                main.mcp_client, "list_tools", new_callable=AsyncMock, return_value=[tool]), patch.object(
+                main.mcp_client, "call_tool", new_callable=AsyncMock, return_value={"price": 1}) as call:
+            result = self.client.post("/api/tool-call", json={"tool": "get_live_quote", "args": {"symbol": "AAPL"}})
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json(), {"tool": "get_live_quote", "data": {"price": 1}})
+            call.assert_awaited_once_with("get_live_quote", {"symbol": "AAPL"})
+            self.assertEqual(self.client.post("/api/tool-call", json={"tool": "nope", "args": {}}).status_code, 404)
+        self.assertEqual(self.client.post("/api/tool-call", json={"tool": "get_live_quote", "args": {}}).status_code, 503)
+
     def test_mcp_failure_is_explicit(self):
         with patch.object(main, "MCP_ENABLED", True), patch.object(main.mcp_client, "list_tools", new_callable=AsyncMock, side_effect=RuntimeError("secret")):
             events = self.generate(FakeClient([]))
@@ -208,7 +220,7 @@ class MultiServerTests(unittest.IsolatedAsyncioTestCase):
         })
 
     async def test_config_lists_demo_and_live(self):
-        self.assertEqual([s["name"] for s in main.MCP_SERVERS], ["demo", "live"])
+        self.assertEqual([s["name"] for s in main.MCP_SERVERS], ["demo", "live", "ecb"])
 
     async def test_routing_and_grouping(self):
         demo, live = self.demo_tool(), self.live_tool()
@@ -224,7 +236,7 @@ class MultiServerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([t.name for t in tools], ["get_stock_quote", "get_live_quote"])
             groups = await client.list_tools_by_server()
             self.assertEqual([(g["name"], [t.name for t in g["tools"]]) for g in groups],
-                             [("demo", ["get_stock_quote"]), ("live", ["get_live_quote"])])
+                             [("demo", ["get_stock_quote"]), ("live", ["get_live_quote"]), ("ecb", ["get_live_quote"])])
             self.assertEqual(await client.call_tool("get_live_quote", {"symbol": "AAPL"}), {"ok": "live"})
             self.assertEqual(await client.call_tool("get_stock_quote", {"symbol": "AAPL"}), {"ok": "demo"})
             self.assertEqual(len(main.build_gemini_tools(tools)[0].function_declarations), 2)
@@ -328,6 +340,17 @@ class DatasetTests(unittest.TestCase):
     def test_generate_unknown_dataset_is_404(self):
         result = self.client.post("/api/generate", json={"message": "Hi", "dataset_id": "nope_nope"})
         self.assertEqual(result.status_code, 404)
+
+    def test_share_roundtrip(self):
+        html = "<html><body>" + "x" * 200 + "</body></html>"
+        result = self.client.post("/api/share", json={"html": html})
+        self.assertEqual(result.status_code, 200)
+        share_id = result.json()["id"]
+        page = self.client.get(f"/share/{share_id}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("x" * 200, page.text)
+        self.assertEqual(self.client.get("/share/nope").status_code, 404)
+        self.assertEqual(self.client.post("/api/share", json={"html": "tiny"}).status_code, 422)
 
     def test_delete_dataset(self):
         data = self.upload("test_gone.csv", "a\n1\n").json()

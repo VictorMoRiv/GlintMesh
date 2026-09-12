@@ -103,6 +103,8 @@ def _result_is_error(result) -> bool:
 
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+SHARE_DIR = BASE_DIR / "shares"
+SHARE_DIR.mkdir(exist_ok=True)
 DATASET_EXTS = {".csv", ".json"}
 DATASET_MAX_BYTES = 2 * 1024 * 1024
 DATASET_MAX_ROWS = 200
@@ -368,11 +370,13 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
                     contents.append(types.Content(role="model", parts=model_parts))
                     results = []
                     for call in function_calls:
-                        yield event("tool_call", content=f"Fetching {call.name.replace('_', ' ')}...")
+                        call_args = dict(call.args or {})
+                        yield event("tool_call", content=f"Fetching {call.name.replace('_', ' ')}...",
+                                    tool=call.name, args=call_args)
                         try:
                             if call.name not in allowed_tools:
                                 raise ValueError("Unknown tool")
-                            data = await mcp_client.call_tool(call.name, dict(call.args or {}))
+                            data = await mcp_client.call_tool(call.name, call_args)
                             yield event("tool_result", tool=call.name, data=data)
                             result = {"result": data}
                         except Exception:
@@ -422,6 +426,51 @@ async def list_datasets():
         items.append({"id": path.stem, "name": path.name, "columns": columns, "n_rows": len(rows),
                       "size": path.stat().st_size, "sample": rows[:3]})
     return {"datasets": items}
+
+
+class ToolCallRequest(BaseModel):
+    tool: str = Field(min_length=1, max_length=80)
+    args: dict = Field(default_factory=dict)
+
+
+class ShareRequest(BaseModel):
+    html: str = Field(min_length=100, max_length=500000)
+
+
+@app.post("/api/tool-call")
+async def direct_tool_call(body: ToolCallRequest):
+    """Re-run a single MCP tool without Gemini (free live refresh for A2UI surfaces)."""
+    if not MCP_ENABLED:
+        raise HTTPException(status_code=503, detail="MCP tools are unavailable.")
+    try:
+        tools = await mcp_client.list_tools()
+    except Exception:
+        raise HTTPException(status_code=503, detail="MCP tools are unavailable.")
+    if body.tool not in {tool.name for tool in tools}:
+        raise HTTPException(status_code=404, detail="Unknown tool.")
+    try:
+        data = await mcp_client.call_tool(body.tool, dict(body.args or {}))
+    except Exception:
+        raise HTTPException(status_code=502, detail="The MCP tool could not complete the request.")
+    return {"tool": body.tool, "data": data}
+
+
+@app.post("/api/share")
+async def share_interface(body: ShareRequest):
+    """Save a generated interface and return a shareable link."""
+    share_id = uuid.uuid4().hex[:12]
+    (SHARE_DIR / f"{share_id}.html").write_text(body.html, encoding="utf-8")
+    return {"id": share_id, "url": f"/share/{share_id}"}
+
+
+@app.get("/share/{share_id}", response_class=HTMLResponse)
+async def serve_share(share_id: str):
+    if not re.fullmatch(r"[a-f0-9]{12}", share_id or ""):
+        raise HTTPException(status_code=404, detail="Not found.")
+    path = SHARE_DIR / f"{share_id}.html"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Not found.")
+    return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
 @app.delete("/api/datasets/{dataset_id}")
