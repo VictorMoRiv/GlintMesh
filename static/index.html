@@ -187,9 +187,27 @@
     * { scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.14) transparent; }
     @media (max-width: 860px) { :root{--sidebar-width:0px;} #sidebar{display:none;} #main-body{padding:8px;} .welcome-features{grid-template-columns:1fr;} }
   </style>
+  <style id="variant-dark">
+    /* ─── Variante Minimal Dark plana (override) ─── */
+    body.variant-dark { --text-primary:#e2e8f0; --text-secondary:rgba(226,232,240,0.6); --text-muted:rgba(226,232,240,0.35);
+      --glass-bg:#111827; --glass-bg-hover:#1f2937; --glass-border:#1f2937; --glass-border-strong:#374151;
+      --accent-blue:#34d399; --accent-cyan:#34d399; --accent-purple:#34d399;
+      --gradient-main:linear-gradient(135deg,#059669,#34d399); --shadow-card:none; --shadow-glow:none; --radius-lg:10px; --radius-md:8px; }
+    body.variant-dark { background:#030712; }
+    body.variant-dark::before, body.variant-dark::after, body.variant-dark #bg-orb-3, body.variant-dark #bg-noise { display:none; }
+    body.variant-dark #header, body.variant-dark #sidebar, body.variant-dark #content-area { background:#0b1220; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; border-color:#1f2937; }
+    body.variant-dark #main-body { padding:16px; gap:16px; }
+    body.variant-dark .tool-card, body.variant-dark .feature-card, body.variant-dark .suggestion-chip,
+    body.variant-dark .agent-message-bubble, body.variant-dark .a2ui-card, body.variant-dark #input-wrapper,
+    body.variant-dark .btn-glass, body.variant-dark .version-pill { backdrop-filter:none; box-shadow:none; border-radius:8px; }
+    body.variant-dark .logo-mark, body.variant-dark #send-btn, body.variant-dark .agent-icon { border-radius:8px; box-shadow:none; }
+    body.variant-dark .tab-btn.active { color:#34d399; background:rgba(52,211,153,0.1); border-color:rgba(52,211,153,0.3); }
+    body.variant-dark .welcome-icon { box-shadow:none; }
+    body.variant-dark .proto-badge { background:rgba(52,211,153,0.1); border-color:rgba(52,211,153,0.3); color:#34d399; }
+  </style>
 </head>
 
-<body>
+<body class="variant-dark">
 <div id="bg-orb-3"></div>
 <div id="bg-noise"></div>
 <div id="app-shell">
