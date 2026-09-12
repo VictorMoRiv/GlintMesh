@@ -77,8 +77,8 @@ const I18N = {
 };
 let lang = localStorage.getItem('glintmesh-lang') || 'es';
 if (!I18N[lang]) lang = 'es';
-Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', signin: 'Entrar', signup: 'Registro', signin_title: 'Iniciar sesión', voice_on: 'Escuchando... habla ahora', voice_off: 'Voz no disponible en este navegador', img_many: 'Máximo 3 imágenes', img_big: 'Imagen muy pesada (máx 1.5 MB)' });
-Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', signin: 'Sign in', signup: 'Register', signin_title: 'Sign in', voice_on: 'Listening... speak now', voice_off: 'Voice not available in this browser', img_many: 'Max 3 images', img_big: 'Image too large (max 1.5 MB)' });
+Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', signin: 'Entrar', signup: 'Registro', signin_title: 'Iniciar sesión', voice_on: 'Escuchando... habla ahora', voice_off: 'Voz no disponible en este navegador', voice_mic_denied: 'Permite el micrófono en el navegador y reintenta', voice_no_mic: 'No se encontró micrófono', voice_no_speech: 'No te escuché, habla más fuerte y reintenta', voice_network: 'Voz necesita internet (Chrome/Edge)', voice_lang: 'Idioma de voz no soportado', img_many: 'Máximo 3 imágenes', img_big: 'Imagen muy pesada (máx 1.5 MB)' });
+Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', signin: 'Sign in', signup: 'Register', signin_title: 'Sign in', voice_on: 'Listening... speak now', voice_off: 'Voice not available in this browser', voice_mic_denied: 'Allow the microphone in the browser and retry', voice_no_mic: 'No microphone found', voice_no_speech: 'Did not hear you, speak up and retry', voice_network: 'Voice needs internet (Chrome/Edge)', voice_lang: 'Voice language not supported', img_many: 'Max 3 images', img_big: 'Image too large (max 1.5 MB)' });
 const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k;
 
 function applyLang(next) {
@@ -616,6 +616,7 @@ async function handleSubmit() {
   const message = chatTextarea.value.trim();
   if (!message || state.isGenerating) return;
   if (message.length > 500) return;
+  try { recog && listening && recog.stop(); } catch (e) {}
   const controller = new AbortController();
   state.controller = controller; state.isGenerating = true;
   state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.toolResults = {}; state.a2ui = [];
@@ -989,23 +990,62 @@ function showToast(message, type = 'info') {
 
 let cachedHealth = null;
 // ─── Voz: dictado Web Speech API (degradado si no hay soporte) ─────────────
-let recog = null, listening = false;
+let recog = null, listening = false, voiceBase = '', voiceInterim = '';
 (function initVoice() {
   const btn = $('mic-btn');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { btn.style.opacity = '0.35'; btn.title = t('voice_off'); btn.addEventListener('click', () => showToast(t('voice_off'), 'error')); return; }
   const r = new SR();
-  r.interimResults = false; r.maxAlternatives = 1;
-  r.onresult = (e) => {
-    const txt = (e.results && e.results[0] && e.results[0][0] && e.results[0][0].transcript) || '';
-    if (txt) { chatTextarea.value = (chatTextarea.value ? chatTextarea.value + ' ' : '') + txt.trim(); chatTextarea.dispatchEvent(new Event('input')); chatTextarea.focus(); }
+  r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
+  const setRec = (on) => {
+    listening = on;
+    btn.innerHTML = on ? '<i class="bi bi-record-circle-fill"></i>' : '<i class="bi bi-mic"></i>';
+    btn.style.color = on ? 'var(--accent-red)' : '';
+    btn.style.animation = on ? 'micPulse 1s ease-in-out infinite' : '';
+    if (!document.getElementById('mic-pulse-style')) {
+      const s = document.createElement('style'); s.id = 'mic-pulse-style';
+      s.textContent = '@keyframes micPulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }';
+      document.head.appendChild(s);
+    }
+    setStatus(on ? t('voice_on') : t('ready'), on ? 'active' : '');
   };
-  r.onend = () => { listening = false; btn.style.color = ''; };
-  r.onerror = () => { listening = false; btn.style.color = ''; };
+  r.onresult = (e) => {
+    let finalTxt = '', interimTxt = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      if (res.isFinal) finalTxt += res[0].transcript;
+      else interimTxt += res[0].transcript;
+    }
+    voiceInterim = interimTxt.trim();
+    const base = voiceBase ? voiceBase + ' ' : '';
+    chatTextarea.value = (base + finalTxt.trim() + (voiceInterim ? ' ' + voiceInterim : '')).slice(0, 500);
+    chatTextarea.dispatchEvent(new Event('input'));
+    if (finalTxt.trim()) voiceBase = (base + finalTxt.trim()).trim();
+  };
+  r.onend = () => {
+    voiceInterim = '';
+    if (voiceBase) { chatTextarea.value = voiceBase.slice(0, 500); chatTextarea.dispatchEvent(new Event('input')); chatTextarea.focus(); }
+    setRec(false);
+  };
+  r.onerror = (e) => {
+    const err = (e && e.error) || 'error';
+    setRec(false);
+    const msgs = { 'not-allowed': 'voice_mic_denied', 'service-not-allowed': 'voice_mic_denied', 'audio-capture': 'voice_no_mic', 'no-speech': 'voice_no_speech', 'network': 'voice_network', 'aborted': '', 'language-not-supported': 'voice_lang' };
+    const key = msgs[err];
+    if (key) showToast(t(key), 'error');
+    else if (err) showToast('Voz: ' + err, 'error');
+  };
   recog = r;
   btn.addEventListener('click', () => {
-    if (listening) { try { r.stop(); } catch (e) {} return; }
-    try { r.lang = lang === 'es' ? 'es-ES' : 'en-US'; r.start(); listening = true; btn.style.color = 'var(--accent-red)'; showToast(t('voice_on'), 'info'); } catch (e) {}
+    if (listening) { try { r.stop(); } catch (err) {} return; }
+    voiceBase = chatTextarea.value.trim();
+    voiceInterim = '';
+    try {
+      r.lang = lang === 'es' ? 'es-ES' : 'en-US';
+      r.start();
+      setRec(true);
+      showToast(t('voice_on'), 'info');
+    } catch (err) { showToast(t('voice_off'), 'error'); }
   });
 })();
 
