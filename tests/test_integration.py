@@ -88,7 +88,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(fake.calls[0]["model"], main.GEMINI_MODEL)
         self.assertEqual(fake.calls[0]["contents"][0].parts[0].text, "Generate a card")
         self.assertTrue(fake.closed)
-        self.assertEqual(self.client.get("/api/tools").json(), {"enabled": False, "tools": []})
+        self.assertEqual(self.client.get("/api/tools").json(), {"enabled": False, "tools": [], "servers": []})
 
     def test_error_is_sanitized_and_has_no_done(self):
         fake = FakeClient([[RuntimeError("test-key-never-public internal request")]])
@@ -142,6 +142,54 @@ class MCPAdapterTests(unittest.IsolatedAsyncioTestCase):
         result = await client.call_tool("get_stock_quote", {"symbol": "AAPL"})
         self.assertEqual(result["symbol"], "AAPL")
         self.assertIsInstance(result["price"], (int, float))
+
+
+class MultiServerTests(unittest.IsolatedAsyncioTestCase):
+    def demo_tool(self):
+        return SimpleNamespace(name="get_stock_quote", description="Demo quote", inputSchema={
+            "type": "object", "properties": {"symbol": {"type": "string"}}, "required": ["symbol"],
+        })
+
+    def live_tool(self):
+        return SimpleNamespace(name="get_live_quote", description="Live quote", input_schema={
+            "type": "object", "properties": {"symbol": {"type": "string"}}, "required": ["symbol"],
+        })
+
+    async def test_config_lists_demo_and_live(self):
+        self.assertEqual([s["name"] for s in main.MCP_SERVERS], ["demo", "live"])
+
+    async def test_routing_and_grouping(self):
+        demo, live = self.demo_tool(), self.live_tool()
+
+        async def fake_request(client_self, server, tool_name=None, tool_args=None):
+            if tool_name is None:
+                return [demo] if server["name"] == "demo" else [live]
+            return {"ok": server["name"]}
+
+        client = main.MCPFinancialClient()
+        with patch.object(main.MCPFinancialClient, "_request", autospec=True, side_effect=fake_request):
+            tools = await client.list_tools()
+            self.assertEqual([t.name for t in tools], ["get_stock_quote", "get_live_quote"])
+            groups = await client.list_tools_by_server()
+            self.assertEqual([(g["name"], [t.name for t in g["tools"]]) for g in groups],
+                             [("demo", ["get_stock_quote"]), ("live", ["get_live_quote"])])
+            self.assertEqual(await client.call_tool("get_live_quote", {"symbol": "AAPL"}), {"ok": "live"})
+            self.assertEqual(await client.call_tool("get_stock_quote", {"symbol": "AAPL"}), {"ok": "demo"})
+            self.assertEqual(len(main.build_gemini_tools(tools)[0].function_declarations), 2)
+
+    def test_api_tools_groups_by_server(self):
+        groups = [
+            {"name": "demo", "label": "Demo", "tools": [self.demo_tool()]},
+            {"name": "live", "label": "Live", "tools": [self.live_tool()]},
+        ]
+        client = TestClient(main.app)
+        with patch.object(main, "MCP_ENABLED", True), patch.object(
+                main.mcp_client, "list_tools_by_server", new_callable=AsyncMock, return_value=groups):
+            body = client.get("/api/tools").json()
+        self.assertTrue(body["enabled"])
+        self.assertEqual([s["name"] for s in body["servers"]], ["demo", "live"])
+        self.assertEqual([(t["name"], t["server"]) for t in body["tools"]],
+                         [("get_stock_quote", "demo"), ("get_live_quote", "live")])
 
 
 if __name__ == "__main__":

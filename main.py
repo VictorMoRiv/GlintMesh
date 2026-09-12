@@ -31,8 +31,9 @@ For an interface request, briefly explain what you are building, then return a c
 Chart.js when useful, a dark theme (#0a0e27 to #1a1f4e), glassmorphism cards, and blue accents.
 Do not use emojis. Make the interface responsive and format financial numbers clearly.
 Never describe invented or simulated numbers as live data. When no data source is available,
-use clearly labeled sample data or the user's supplied values. The bundled MCP tools also
-return simulated demonstration data: label it as such. Do not invent a successful tool result.
+use clearly labeled sample data or the user's supplied values. Demo MCP tools return
+simulated demonstration data: label it as such. Tools named get_live_* return real
+market data via Yahoo Finance: present it as live. Do not invent a successful tool result.
 When MCP tools are used, structure the visible output as A2UI-style surfaces (cards, charts, tables).
 """
 
@@ -60,17 +61,35 @@ def _result_is_error(result) -> bool:
     return bool(getattr(result, "isError", getattr(result, "is_error", False)))
 
 
+def _load_mcp_servers():
+    """Servers are configured in mcp_servers.json; falls back to the demo server."""
+    try:
+        cfg = json.loads((BASE_DIR / "mcp_servers.json").read_text(encoding="utf-8"))
+        servers = [s for s in cfg.get("servers", []) if s.get("name") and s.get("script")]
+        if servers:
+            return servers
+    except Exception:
+        pass
+    return [{"name": "demo", "script": "mcp_server.py", "label": "Demo (simulated data)"}]
+
+
+MCP_SERVERS = _load_mcp_servers()
+
+
 class MCPFinancialClient:
-    """Optional local MCP adapter; startup does not require an MCP connection."""
+    """Multi-server MCP adapter; startup does not require an MCP connection."""
 
-    def __init__(self):
+    def __init__(self, servers=None):
+        self.servers = servers if servers is not None else MCP_SERVERS
         self._tools_cache = None
+        self._by_server = {}
+        self._owner = {}
 
-    async def _request(self, tool_name=None, tool_args=None):
+    async def _request(self, server, tool_name=None, tool_args=None):
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
-        params = StdioServerParameters(command=sys.executable, args=[str(BASE_DIR / "mcp_server.py")])
+        params = StdioServerParameters(command=sys.executable, args=[str(BASE_DIR / server["script"])])
         async with asyncio.timeout(30):
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
@@ -92,11 +111,35 @@ class MCPFinancialClient:
 
     async def list_tools(self):
         if self._tools_cache is None:
-            self._tools_cache = await self._request()
+            flat, by_server, owner = [], {}, {}
+            for srv in self.servers:
+                tools = await self._request(srv)
+                by_server[srv["name"]] = tools
+                for tool in tools:
+                    if tool.name in owner:
+                        continue
+                    owner[tool.name] = srv
+                    flat.append(tool)
+            self._tools_cache = flat
+            self._by_server = by_server
+            self._owner = owner
         return self._tools_cache
 
     async def call_tool(self, name, arguments):
-        return await self._request(name, arguments)
+        if self._tools_cache is None:
+            await self.list_tools()
+        server = self._owner.get(name, self.servers[0] if self.servers else None)
+        if server is None:
+            raise RuntimeError("No MCP server configured")
+        return await self._request(server, name, arguments)
+
+    async def list_tools_by_server(self):
+        await self.list_tools()
+        return [{
+            "name": srv["name"],
+            "label": srv.get("label", srv["name"]),
+            "tools": self._by_server.get(srv["name"], []),
+        } for srv in self.servers]
 
 
 mcp_client = MCPFinancialClient()
@@ -219,12 +262,18 @@ async def generate_interface(body: GenerateRequest):
 @app.get("/api/tools")
 async def list_tools():
     if not MCP_ENABLED:
-        return {"enabled": False, "tools": []}
+        return {"enabled": False, "tools": [], "servers": []}
     try:
-        tools = await mcp_client.list_tools()
+        groups = await mcp_client.list_tools_by_server()
         return {"enabled": True, "tools": [
-            {"name": tool.name, "description": tool.description, "parameters": _tool_schema(tool)}
-            for tool in tools
+            {"name": tool.name, "description": tool.description,
+             "parameters": _tool_schema(tool), "server": group["name"]}
+            for group in groups for tool in group["tools"]
+        ], "servers": [
+            {"name": group["name"], "label": group["label"],
+             "tools": [{"name": tool.name, "description": tool.description,
+                        "parameters": _tool_schema(tool)} for tool in group["tools"]]}
+            for group in groups
         ]}
     except Exception:
         raise HTTPException(status_code=503, detail="MCP tools are unavailable.")

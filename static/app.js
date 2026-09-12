@@ -153,10 +153,17 @@ async function loadTools() {
       return;
     }
     const tools = data.tools || [];
-    let html = '<div class="mcp-server-row"><i class="bi bi-hdd-network"></i>' + server + ' &bull; ' + protocol + ' &bull; ' + tools.length + '</div>';
-    html += tools.map((tl) => '<div class="mcp-tool"><div class="mcp-name"><span class="mcp-dot"></span>' + escapeHtml(tl.name) + '</div>'
-      + '<div class="mcp-desc">' + escapeHtml(tl.description || '') + '</div>'
-      + '<details><summary>schema</summary><pre>' + escapeHtml(JSON.stringify(tl.parameters || {}, null, 2)) + '</pre></details></div>').join('');
+    const groups = data.servers && data.servers.length
+      ? data.servers
+      : [{ name: server, label: server, tools }];
+    let html = '';
+    groups.forEach((g) => {
+      const gtools = g.tools || [];
+      html += '<div class="mcp-server-row"><i class="bi bi-hdd-network"></i>' + escapeHtml(g.label || g.name) + ' &bull; ' + gtools.length + '</div>';
+      html += gtools.map((tl) => '<div class="mcp-tool"><div class="mcp-name"><span class="mcp-dot"></span>' + escapeHtml(tl.name) + '</div>'
+        + '<div class="mcp-desc">' + escapeHtml(tl.description || '') + '</div>'
+        + '<details><summary>schema</summary><pre>' + escapeHtml(JSON.stringify(tl.parameters || {}, null, 2)) + '</pre></details></div>').join('');
+    });
     list.innerHTML = html || '<div style="font-size:12px;">No tools</div>';
   } catch (e) { showToast(t('mcp_error'), 'error'); list.innerHTML = '<div style="font-size:12px;color:var(--accent-red);">MCP unreachable</div>'; }
 }
@@ -248,9 +255,9 @@ function destroyA2UICharts() {
 }
 
 function a2uiKind(tool) {
-  if (/historical|prices/i.test(tool)) return 'chart';
+  if (/historical|history|prices/i.test(tool)) return 'chart';
   if (/compound/i.test(tool)) return 'chart';
-  if (/portfolio|forex|indices|news/i.test(tool)) return 'table';
+  if (/portfolio|forex|_fx|indices|news/i.test(tool)) return 'table';
   if (/credit/i.test(tool)) return 'gauge';
   return 'card';
 }
@@ -277,7 +284,7 @@ function a2uiPortfolio(d) {
 }
 
 function a2uiIndices(d) {
-  const tiles = Object.entries(d || {}).map(([k, v]) => '<div class="a2ui-metric"><div class="a2ui-mlabel">' + esc(v.name || k) + '</div>'
+  const tiles = Object.entries(d || {}).filter(([, v]) => v && typeof v === 'object').map(([k, v]) => '<div class="a2ui-metric"><div class="a2ui-mlabel">' + esc(v.name || k) + '</div>'
     + '<div class="a2ui-mval">' + fmtNum(v.value) + '</div>' + deltaBadge(v.change_percent) + '</div>').join('');
   return '<div class="a2ui-grid">' + tiles + '</div>';
 }
@@ -332,14 +339,14 @@ function a2uiForex(d) {
 function renderA2UIBody(tool, data, cid) {
   try {
     if (!data || typeof data !== 'object') return '<pre class="a2ui-raw">' + esc(JSON.stringify(data)) + '</pre>';
-    if (tool === 'get_stock_quote') return a2uiQuote(data);
+    if (tool === 'get_stock_quote' || tool === 'get_live_quote') return a2uiQuote(data);
     if (tool === 'get_portfolio_summary') return a2uiPortfolio(data);
-    if (tool === 'get_market_indices') return a2uiIndices(data);
-    if (tool === 'get_historical_prices') return a2uiHistory(data, cid);
+    if (tool === 'get_market_indices' || tool === 'get_live_indices') return a2uiIndices(data);
+    if (tool === 'get_historical_prices' || tool === 'get_live_history') return a2uiHistory(data, cid);
     if (tool === 'get_financial_news') return a2uiNews(data);
     if (tool === 'analyze_credit_risk') return a2uiCredit(data);
     if (tool === 'calculate_compound_interest') return a2uiCompound(data, cid);
-    if (tool === 'get_forex_rates') return a2uiForex(data);
+    if (tool === 'get_forex_rates' || tool === 'get_live_fx') return a2uiForex(data);
     return '<pre class="a2ui-raw">' + esc(JSON.stringify(data, null, 2)).slice(0, 4000) + '</pre>';
   } catch (e) {
     return '<div class="a2ui-mlabel">Could not render this surface</div>';
@@ -354,7 +361,7 @@ function mountA2UIChart(tool, data, cid) {
     const el = document.getElementById(cid);
     if (!el) return;
     let cfg = null;
-    if (tool === 'get_historical_prices') {
+    if (tool === 'get_historical_prices' || tool === 'get_live_history') {
       const pts = data.data || [];
       const step = Math.max(1, Math.ceil(pts.length / 14));
       cfg = { type: 'line', data: { labels: pts.filter((_, i) => i % step === 0).map((p) => p.date), datasets: [{ data: pts.filter((_, i) => i % step === 0).map((p) => p.close), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } };
@@ -430,6 +437,9 @@ function fillA2UICard(card, tool, data, failed) {
   }
   body.innerHTML = renderA2UIBody(tool, data, card.dataset.cid);
   card.style.borderLeftColor = 'var(--accent-green)';
+  const live = data && data.source === 'live';
+  card.querySelector('.a2ui-head').insertAdjacentHTML('beforeend',
+    live ? '<span class="proto-badge live">LIVE</span>' : '<span class="proto-badge mcp">SIM</span>');
   mountA2UIChart(tool, data, card.dataset.cid);
 }
 function updateA2UICard(tool, data, failed) {
