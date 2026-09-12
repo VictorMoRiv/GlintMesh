@@ -18,7 +18,11 @@ Edita `.env` y configura tu clave de Google AI Studio. Si ya tienes `.env`, cons
 GEMINI_API_KEY=tu_clave_de_google_ai_studio
 GEMINI_MODEL=gemini-3.6-flash
 MCP_ENABLED=false
+# GEMINI_API_KEYS=key1,key2
+# GEMINI_MODELS=gemini-3.6-flash,gemini-3-flash-preview
 ```
+
+Ante límite de cuota (429) el backend rota keys y prueba los modelos en orden antes de fallar.
 
 El modelo predeterminado es el que se verificó con el sandbox. Puedes cambiarlo usando `GEMINI_MODEL`. La clave se lee exclusivamente en el backend; `.env` está excluido de Git. No pongas claves en `static/`.
 

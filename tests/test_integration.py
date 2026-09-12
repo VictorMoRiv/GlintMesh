@@ -75,7 +75,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/generate", json={}).status_code, 422)
 
     def test_missing_key(self):
-        with patch.object(main, "GEMINI_API_KEY", ""):
+        with patch.object(main, "GEMINI_API_KEY", ""), patch.object(main, "GEMINI_API_KEYS", []):
             self.assertEqual(self.client.post("/api/generate", json={"message": "Hola"}).status_code, 503)
 
     def test_real_sse_contract_without_mcp(self):
@@ -126,6 +126,20 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/generate", json={"message": "Hi", "context": "x" * 2001}).status_code, 422)
         result = self.client.post("/api/generate", json={"message": "Hi", "context": "   "})
         self.assertEqual(result.status_code, 200)
+
+    def test_quota_falls_back_to_next_model(self):
+        class QuotaError(RuntimeError):
+            code = 429
+
+        html = '```html\n<html><body>ok</body></html>\n```'
+        fake = FakeClient([[QuotaError("quota")], [response(types.Part(text=html))]])
+        with patch.object(main, "GEMINI_MODELS", ["model-a", "model-b"]), patch.object(main.genai, "Client", return_value=fake):
+            result = self.client.post("/api/generate", json={"message": "Hi"})
+        self.assertEqual(result.status_code, 200)
+        events = [json.loads(frame[6:]) for frame in result.text.strip().split("\n\n")]
+        self.assertEqual([c["model"] for c in fake.calls], ["model-a", "model-b"])
+        self.assertIn("status", [e["type"] for e in events])
+        self.assertEqual(events[-1]["type"], "done")
 
     def test_mcp_failure_is_explicit(self):
         with patch.object(main, "MCP_ENABLED", True), patch.object(main.mcp_client, "list_tools", new_callable=AsyncMock, side_effect=RuntimeError("secret")):

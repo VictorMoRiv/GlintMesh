@@ -18,7 +18,9 @@ from pydantic import BaseModel, Field, field_validator
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_API_KEYS = [k.strip() for k in os.getenv("GEMINI_API_KEYS", GEMINI_API_KEY).split(",") if k.strip()]
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
+GEMINI_MODELS = [m.strip() for m in os.getenv("GEMINI_MODELS", GEMINI_MODEL).split(",") if m.strip()] or [GEMINI_MODEL]
 MCP_ENABLED = os.getenv("MCP_ENABLED", "false").lower() in {"true", "1", "yes"}
 
 app = FastAPI(title="GlintMesh", version="2.0.0")
@@ -203,63 +205,71 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
         temperature=0.7,
     )
     allowed_tools = {tool.name for tool in mcp_tools}
-    has_text = False
-    try:
-        async with genai.Client(api_key=GEMINI_API_KEY, http_options=types.HttpOptions(timeout=120000)).aio as client:
-            for _ in range(6):
-                model_parts = []
-                function_calls = []
-                finish_reason = None
-                async for chunk in await client.models.generate_content_stream(
-                    model=GEMINI_MODEL, contents=contents, config=config,
-                ):
-                    candidates = chunk.candidates or []
-                    if not candidates:
-                        continue
-                    candidate = candidates[0]
-                    if candidate.finish_reason:
-                        finish_reason = candidate.finish_reason
-                    for part in (candidate.content.parts if candidate.content else []) or []:
-                        # Preserve complete parts, including Gemini thought signatures, for tool follow-ups.
-                        model_parts.append(part)
-                        if part.function_call:
-                            function_calls.append(part.function_call)
-                        elif part.text and not part.thought:
-                            has_text = True
-                            yield event("text_chunk", content=part.text)
+    initial_contents = list(contents)
+    combos = [(key, model) for key in (GEMINI_API_KEYS or [GEMINI_API_KEY]) for model in GEMINI_MODELS]
+    for combo_index, (api_key, model) in enumerate(combos):
+        last_combo = combo_index == len(combos) - 1
+        contents = list(initial_contents)
+        has_text = False
+        try:
+            async with genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=120000)).aio as client:
+                for _ in range(6):
+                    model_parts = []
+                    function_calls = []
+                    finish_reason = None
+                    async for chunk in await client.models.generate_content_stream(
+                        model=model, contents=contents, config=config,
+                    ):
+                        candidates = chunk.candidates or []
+                        if not candidates:
+                            continue
+                        candidate = candidates[0]
+                        if candidate.finish_reason:
+                            finish_reason = candidate.finish_reason
+                        for part in (candidate.content.parts if candidate.content else []) or []:
+                            # Preserve complete parts, including Gemini thought signatures, for tool follow-ups.
+                            model_parts.append(part)
+                            if part.function_call:
+                                function_calls.append(part.function_call)
+                            elif part.text and not part.thought:
+                                has_text = True
+                                yield event("text_chunk", content=part.text)
 
-                if finish_reason and finish_reason != types.FinishReason.STOP:
-                    yield event("error", content="Gemini could not finish this response. Try a shorter or different request.")
-                    return
-                if not function_calls:
-                    if has_text:
-                        yield event("done", content="Response complete")
-                    else:
-                        yield event("error", content="Gemini returned no text. Try a different request.")
-                    return
+                    if finish_reason and finish_reason != types.FinishReason.STOP:
+                        yield event("error", content="Gemini could not finish this response. Try a shorter or different request.")
+                        return
+                    if not function_calls:
+                        if has_text:
+                            yield event("done", content="Response complete")
+                        else:
+                            yield event("error", content="Gemini returned no text. Try a different request.")
+                        return
 
-                contents.append(types.Content(role="model", parts=model_parts))
-                results = []
-                for call in function_calls:
-                    yield event("tool_call", content=f"Fetching {call.name.replace('_', ' ')}...")
-                    try:
-                        if call.name not in allowed_tools:
-                            raise ValueError("Unknown tool")
-                        data = await mcp_client.call_tool(call.name, dict(call.args or {}))
-                        yield event("tool_result", tool=call.name, data=data)
-                        result = {"result": data}
-                    except Exception:
-                        result = {"error": "The MCP tool could not complete the request."}
-                        yield event("tool_result", tool=call.name, data=result, failed=True)
-                    results.append(types.Part(function_response=types.FunctionResponse(
-                        name=call.name, id=call.id, response=result,
-                    )))
-                contents.append(types.Content(role="user", parts=results))
-                yield event("status", content="Generating interface from tool results...")
-            yield event("error", content="Tool call limit reached. Please try a simpler request.")
-    except Exception as error:
-        # Do not expose SDK exception strings: they may contain request details or credentials.
-        yield event("error", content=gemini_error_message(error))
+                    contents.append(types.Content(role="model", parts=model_parts))
+                    results = []
+                    for call in function_calls:
+                        yield event("tool_call", content=f"Fetching {call.name.replace('_', ' ')}...")
+                        try:
+                            if call.name not in allowed_tools:
+                                raise ValueError("Unknown tool")
+                            data = await mcp_client.call_tool(call.name, dict(call.args or {}))
+                            yield event("tool_result", tool=call.name, data=data)
+                            result = {"result": data}
+                        except Exception:
+                            result = {"error": "The MCP tool could not complete the request."}
+                            yield event("tool_result", tool=call.name, data=result, failed=True)
+                        results.append(types.Part(function_response=types.FunctionResponse(
+                            name=call.name, id=call.id, response=result,
+                        )))
+                    contents.append(types.Content(role="user", parts=results))
+                    yield event("status", content="Generating interface from tool results...")
+                yield event("error", content="Tool call limit reached. Please try a simpler request.")
+        except Exception as error:
+            # Do not expose SDK exception strings: they may contain request details or credentials.
+            if getattr(error, "code", None) == 429 and not last_combo:
+                yield event("status", content="Usage limit reached, trying another model...")
+                continue
+            yield event("error", content=gemini_error_message(error))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -269,7 +279,7 @@ async def serve_index():
 
 @app.post("/api/generate")
 async def generate_interface(body: GenerateRequest):
-    if not GEMINI_API_KEY:
+    if not GEMINI_API_KEYS:
         raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY in the server .env file before generating.")
     return StreamingResponse(run_agent_stream(body.message, body.lang, body.context), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
@@ -299,7 +309,7 @@ async def list_tools():
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "GlintMesh", "version": "2.0.0",
-            "gemini_configured": bool(GEMINI_API_KEY), "model": GEMINI_MODEL, "mcp_enabled": MCP_ENABLED,
+            "gemini_configured": bool(GEMINI_API_KEYS), "model": GEMINI_MODEL, "mcp_enabled": MCP_ENABLED,
             "mcp_server": "finflow-financial-tools", "protocol": "A2UI over MCP"}
 
 
