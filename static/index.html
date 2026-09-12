@@ -273,6 +273,10 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         <i class="bi bi-tools"></i>
         <span data-i18n="tools">Tools</span>
       </button>
+      <button class="btn-glass" id="btn-data" title="Upload your own dataset">
+        <i class="bi bi-database"></i>
+        <span data-i18n="data">Data</span>
+      </button>
       <button class="btn-glass" id="btn-clear" title="Clear current session">
         <i class="bi bi-arrow-counterclockwise"></i>
         <span data-i18n="clear">Clear</span>
@@ -405,6 +409,11 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
       </div>
 
       <div id="chat-input-area">
+        <div id="dataset-chip" style="display:none; align-items:center; gap:8px; margin-bottom:8px; font-size:12px; color:var(--text-secondary); background:rgba(52,211,153,0.08); border:1px solid rgba(52,211,153,0.3); border-radius:8px; padding:6px 10px;">
+          <i class="bi bi-database" style="color:#34d399;"></i>
+          <span id="dataset-chip-name"></span>
+          <button id="dataset-chip-x" style="margin-left:auto; background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:14px;" title="Remove">&times;</button>
+        </div>
         <div id="input-wrapper">
           <textarea id="chat-textarea" rows="1" maxlength="500" data-i18n-ph="placeholder" placeholder="Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'"></textarea>
           <button id="send-btn" title="Generate interface"><i class="bi bi-arrow-up"></i></button>
@@ -430,6 +439,21 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
   </div>
   <div id="tools-list"></div>
 </aside>
+
+<!-- Data modal -->
+<div id="data-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
+<div id="data-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(480px,94vw); max-height:84vh; overflow-y:auto; background:rgba(10,15,40,0.95); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-database" style="color:#34d399;"></i> <span data-i18n="datasets_title">My datasets</span></h5>
+    <button class="btn-glass" id="btn-close-data" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="datasets_sub">Upload CSV or JSON (max 2 MB). The agent builds the interface from your data.</p>
+  <div style="display:flex; gap:8px; margin-bottom:14px;">
+    <input type="file" id="data-file" accept=".csv,.json" style="flex:1; font-size:12px; color:var(--text-secondary);" />
+    <button class="btn-glass" id="btn-upload"><i class="bi bi-upload"></i> <span data-i18n="upload">Upload</span></button>
+  </div>
+  <div id="data-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+</div>
 
 <div id="toast-container"></div>
 

@@ -16,6 +16,9 @@ const I18N = {
     generated_html: 'HTML generado', copy: 'Copiar', disclaimer: 'GlintMesh puede producir datos financieros simulados con fines demostrativos',
     placeholder: "Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'",
     drawer_title: 'MCPs conectados', drawer_sub: 'Servidores y herramientas disponibles para el agente',
+    data: 'Datos', datasets_title: 'Mis datasets', datasets_sub: 'Sube CSV o JSON (máx 2 MB). El agente construye la interfaz con tus datos.',
+    upload: 'Subir', use: 'Usar', using: 'Usando', no_datasets: 'Aún no hay datasets. Sube tu primer CSV o JSON.',
+    uploaded_ok: 'Dataset cargado', upload_fail: 'No se pudo cargar el dataset', rows: 'filas',
     session_cleared: 'Sesión limpiada', no_export: 'Aún no hay interfaz para exportar', exported: 'Interfaz exportada',
     copied: 'Código copiado', mcp_disabled: 'MCP desactivado. Gemini funciona sin herramientas.', mcp_error: 'No se pudieron obtener herramientas',
     waiting: 'Esperando a Gemini...', generating: 'Generando interfaz...', analyzing: 'Analizando solicitud...',
@@ -35,6 +38,9 @@ const I18N = {
     generated_html: 'Generated HTML', copy: 'Copy', disclaimer: 'GlintMesh may produce simulated financial data for demonstration purposes',
     placeholder: "Describe a financial interface... e.g. 'Build me a real-time stock portfolio dashboard'",
     drawer_title: 'Connected MCPs', drawer_sub: 'Servers and tools available to the agent',
+    data: 'Data', datasets_title: 'My datasets', datasets_sub: 'Upload CSV or JSON (max 2 MB). The agent builds the interface from your data.',
+    upload: 'Upload', use: 'Use', using: 'Using', no_datasets: 'No datasets yet. Upload your first CSV or JSON.',
+    uploaded_ok: 'Dataset uploaded', upload_fail: 'Could not upload dataset', rows: 'rows',
     session_cleared: 'Session cleared', no_export: 'No interface to export yet', exported: 'Interface exported',
     copied: 'Code copied to clipboard', mcp_disabled: 'MCP is disabled. Gemini works without tools.', mcp_error: 'Could not fetch tools',
     waiting: 'Waiting for Gemini...', generating: 'Generating interface...', analyzing: 'Analyzing request...',
@@ -110,6 +116,7 @@ $('btn-clear').addEventListener('click', () => {
   destroyA2UICharts();
   sendBtn.disabled = false; progressBar.style.display = 'none'; previewIframe.srcdoc = '';
   state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.lastSummary = '';
+  activeDataset = null; refreshDatasetChip();
   try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   welcomeState.style.display = 'flex'; generatedWrapper.classList.remove('visible');
   agentBubble.style.display = 'none'; previewContainer.style.display = 'none'; agentBubbleText.textContent = '';
@@ -171,6 +178,74 @@ async function loadTools() {
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+// ─── User datasets ──────────────────────────────────────────────────────────
+let activeDataset = null;
+const dataModal = $('data-modal'), dataOverlay = $('data-overlay');
+function openData() { dataModal.style.display = 'block'; dataOverlay.style.display = 'block'; loadDatasets(); }
+function closeData() { dataModal.style.display = 'none'; dataOverlay.style.display = 'none'; }
+$('btn-data').addEventListener('click', openData);
+$('btn-close-data').addEventListener('click', closeData);
+dataOverlay.addEventListener('click', closeData);
+
+function refreshDatasetChip() {
+  const chip = $('dataset-chip');
+  if (activeDataset) {
+    chip.style.display = 'flex';
+    $('dataset-chip-name').textContent = t('using') + ': ' + activeDataset.name;
+  } else chip.style.display = 'none';
+}
+$('dataset-chip-x').addEventListener('click', () => { activeDataset = null; refreshDatasetChip(); });
+
+async function loadDatasets() {
+  const list = $('data-list');
+  list.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);">…</div>';
+  try {
+    const res = await fetch('/api/datasets');
+    const data = await res.json();
+    const items = data.datasets || [];
+    if (!items.length) { list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">' + t('no_datasets') + '</div>'; return; }
+    list.innerHTML = items.map((d) => '<div class="mcp-tool"><div class="mcp-name"><span class="mcp-dot' + (activeDataset && activeDataset.id === d.id ? '' : ' off') + '"></span>' + escapeHtml(d.name) + '</div>'
+      + '<div class="mcp-desc">' + d.n_rows + ' ' + t('rows') + ' · ' + d.columns.length + ' cols</div>'
+      + '<button class="btn-glass btn-sm" data-ds-use="' + escapeHtml(d.id) + '" style="margin-top:8px;"><i class="bi bi-check"></i> ' + t('use') + '</button></div>').join('');
+    list.querySelectorAll('[data-ds-use]').forEach((btn) => btn.addEventListener('click', () => {
+      const found = items.find((d) => d.id === btn.dataset.dsUse);
+      if (found) { activeDataset = found; refreshDatasetChip(); loadDatasets(); }
+    }));
+  } catch (e) { list.innerHTML = '<div style="font-size:12px;color:var(--accent-red);">MCP unreachable</div>'; }
+}
+
+$('btn-upload').addEventListener('click', async () => {
+  const input = $('data-file');
+  if (!input.files.length) return;
+  const form = new FormData();
+  form.append('file', input.files[0]);
+  try {
+    const res = await fetch('/api/datasets', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'upload failed');
+    activeDataset = { id: data.id, name: data.name };
+    refreshDatasetChip();
+    addDatasetPreviewCard(data);
+    input.value = '';
+    loadDatasets();
+    showToast(t('uploaded_ok'), 'success');
+  } catch (e) { showToast(typeof e.message === 'string' ? e.message : t('upload_fail'), 'error'); }
+});
+
+function addDatasetPreviewCard(ds) {
+  const empty = $('a2ui-empty'); if (empty) empty.remove();
+  const cols = (ds.columns || []).slice(0, 6);
+  const head = cols.map((c) => '<th>' + escapeHtml(c) + '</th>').join('');
+  const rows = (ds.sample || []).slice(0, 5).map((r) => '<tr>' + cols.map((c) => '<td>' + escapeHtml(r[c] ?? '') + '</td>').join('') + '</tr>').join('');
+  const card = document.createElement('div');
+  card.className = 'a2ui-card';
+  card.innerHTML = '<div class="a2ui-head"><span class="proto-badge">A2UI</span><span class="proto-badge">USER DATA</span><span>' + escapeHtml(ds.name || '') + '</span><span style="margin-left:auto;font-size:10px;color:var(--text-muted);">' + ds.n_rows + ' ' + t('rows') + '</span></div>'
+    + '<div class="a2ui-body"><table class="a2ui-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  a2uiFeed.appendChild(card);
+  state.a2ui.push('user_dataset');
+  a2uiBadge.style.display = 'inline-flex'; a2uiBadge.textContent = state.a2ui.length;
+}
+
 $('btn-reload-preview').addEventListener('click', () => { if (state.generatedHTML) renderPreview(state.generatedHTML); });
 $('btn-fullscreen').addEventListener('click', () => {
   if (!state.generatedHTML) return;
@@ -206,6 +281,7 @@ async function handleSubmit() {
   try {
     const payload = { message, lang };
     if (state.lastSummary) payload.context = state.lastSummary.slice(0, 800);
+    if (activeDataset) payload.dataset_id = activeDataset.id;
     const response = await fetch('/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: controller.signal,
@@ -485,7 +561,7 @@ function saveSession() {
     if (!state.generatedHTML && !state.agentMessage) return;
     localStorage.setItem(SESSION_KEY, JSON.stringify({
       lang, agentMessage: agentBubbleText.textContent || '', generatedHTML: state.generatedHTML || '',
-      ts: Date.now(),
+      dataset: activeDataset, ts: Date.now(),
     }));
   } catch (e) {}
 }
@@ -498,6 +574,7 @@ function restoreSession() {
   welcomeState.style.display = 'none';
   generatedWrapper.classList.add('visible');
   state.generatedHTML = saved.generatedHTML || '';
+  if (saved.dataset && saved.dataset.id) { activeDataset = saved.dataset; refreshDatasetChip(); }
   state.lastSummary = (saved.agentMessage || '').slice(0, 800);
   if (saved.agentMessage) { agentBubble.style.display = 'flex'; agentBubbleText.textContent = saved.agentMessage; }
   if (state.generatedHTML) {

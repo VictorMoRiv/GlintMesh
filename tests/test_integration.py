@@ -262,5 +262,52 @@ class FixtureSchemaTests(unittest.TestCase):
         self.assertIsInstance(live["price"], (int, float))
 
 
+class DatasetTests(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(main.app)
+        self.key = patch.object(main, "GEMINI_API_KEY", "test-key-never-public")
+        self.mcp = patch.object(main, "MCP_ENABLED", False)
+        self.key.start()
+        self.mcp.start()
+        self.addCleanup(self.key.stop)
+        self.addCleanup(self.mcp.stop)
+        for path in main.UPLOAD_DIR.glob("test_*"):
+            path.unlink(missing_ok=True)
+
+    def upload(self, name, content, ctype="text/csv"):
+        return self.client.post("/api/datasets", files={"file": (name, content, ctype)})
+
+    def test_upload_csv_and_list(self):
+        body = "symbol,shares\nAAPL,10\nMSFT,5\n"
+        result = self.upload("test_portfolio.csv", body)
+        self.assertEqual(result.status_code, 200)
+        data = result.json()
+        self.assertEqual(data["columns"], ["symbol", "shares"])
+        self.assertEqual(data["n_rows"], 2)
+        listed = self.client.get("/api/datasets").json()["datasets"]
+        self.assertIn(data["id"], [d["id"] for d in listed])
+
+    def test_upload_rejects_bad_files(self):
+        self.assertEqual(self.upload("test_x.exe", "hi").status_code, 415)
+        self.assertEqual(self.upload("test_empty.csv", "").status_code, 413)
+        bad = self.client.post("/api/datasets", files={"file": ("test_bad.json", "{nope", "application/json")})
+        self.assertEqual(bad.status_code, 422)
+
+    def test_generate_with_dataset_reaches_gemini(self):
+        data = self.upload("test_quotes.csv", "symbol,price\nAAPL,300\n").json()
+        fake = FakeClient([[response(types.Part(text="ok"))]])
+        with patch.object(main.genai, "Client", return_value=fake):
+            result = self.client.post("/api/generate", json={"message": "Grafica esto", "dataset_id": data["id"]})
+        self.assertEqual(result.status_code, 200)
+        history = fake.calls[0]["contents"]
+        self.assertEqual(len(history), 2)
+        self.assertIn("test_quotes", history[1].parts[0].text)
+        self.assertIn("AAPL", history[1].parts[0].text)
+
+    def test_generate_unknown_dataset_is_404(self):
+        result = self.client.post("/api/generate", json={"message": "Hi", "dataset_id": "nope_nope"})
+        self.assertEqual(result.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

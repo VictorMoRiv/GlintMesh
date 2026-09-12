@@ -1,14 +1,17 @@
-"""FinFlow AI: Gemini-backed interface generation with optional MCP tools."""
+"""GlintMesh: Gemini-backed interface generation with MCP tools and user datasets."""
 
 import asyncio
+import csv
 import json
 import os
+import re
 import sys
+import uuid
 from pathlib import Path
 from typing import AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from google import genai
@@ -48,6 +51,7 @@ class GenerateRequest(BaseModel):
     message: str = Field(min_length=1, max_length=500)
     lang: str = Field(default="es", pattern="^(es|en)$")
     context: str | None = Field(default=None, max_length=2000)
+    dataset_id: str | None = Field(default=None, max_length=60)
 
     @field_validator("message", mode="before")
     @classmethod
@@ -74,6 +78,87 @@ def _tool_schema(tool):
 
 def _result_is_error(result) -> bool:
     return bool(getattr(result, "isError", getattr(result, "is_error", False)))
+
+
+UPLOAD_DIR = BASE_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+DATASET_EXTS = {".csv", ".json"}
+DATASET_MAX_BYTES = 2 * 1024 * 1024
+DATASET_MAX_ROWS = 200
+
+
+def _safe_dataset_id(filename: str) -> str:
+    stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", Path(filename).stem).strip("_")[:40] or "dataset"
+    return f"{uuid.uuid4().hex[:8]}_{stem}"
+
+
+def _dataset_path(dataset_id: str) -> Path:
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{1,60}", dataset_id or ""):
+        raise HTTPException(status_code=404, detail="Dataset not found.")
+    for ext in DATASET_EXTS:
+        candidate = UPLOAD_DIR / f"{dataset_id}{ext}"
+        if candidate.exists():
+            return candidate
+    raise HTTPException(status_code=404, detail="Dataset not found.")
+
+
+def _parse_dataset_rows(path: Path) -> tuple[list[str], list[dict]]:
+    if path.suffix == ".csv":
+        text = path.read_text(encoding="utf-8-sig")
+        reader = csv.DictReader(text.splitlines())
+        columns = [c for c in (reader.fieldnames or []) if c]
+        rows = []
+        for row in reader:
+            if len(rows) >= DATASET_MAX_ROWS:
+                break
+            rows.append({c: (row.get(c) or "") for c in columns})
+        return columns, rows
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    items = payload if isinstance(payload, list) else payload.get("data", payload.get("rows", []))
+    if not isinstance(items, list):
+        raise ValueError("JSON must be a list of objects.")
+    columns: list[str] = []
+    for item in items:
+        if isinstance(item, dict):
+            for key in item:
+                if key not in columns:
+                    columns.append(key)
+    rows = [{c: item.get(c, "") if isinstance(item, dict) else "" for c in columns} for item in items[:DATASET_MAX_ROWS]]
+    return columns, rows
+
+
+def _dataset_summary(name: str, columns: list[str], rows: list[dict]) -> dict:
+    numeric: dict[str, dict] = {}
+    for col in columns:
+        values = []
+        for row in rows:
+            try:
+                values.append(float(str(row.get(col, "")).replace(",", "").replace("$", "")))
+            except (ValueError, TypeError):
+                continue
+        if len(values) >= max(2, len(rows) // 2) and values:
+            numeric[col] = {"min": round(min(values), 2), "max": round(max(values), 2),
+                            "mean": round(sum(values) / len(values), 2)}
+    return {"columns": columns, "n_rows": len(rows), "numeric": numeric,
+            "sample": rows[:5]}
+
+
+def load_dataset_context(dataset_id: str) -> str:
+    path = _dataset_path(dataset_id)
+    try:
+        columns, rows = _parse_dataset_rows(path)
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="Dataset could not be parsed.") from exc
+    if not columns or not rows:
+        raise HTTPException(status_code=422, detail="Dataset is empty.")
+    summary = _dataset_summary(path.name, columns, rows)
+    lines = [f"User dataset '{path.name}' ({summary['n_rows']} rows, columns: {', '.join(columns)})."]
+    if summary["numeric"]:
+        stats = "; ".join(f"{c}: min {s['min']}, max {s['max']}, mean {s['mean']}" for c, s in summary["numeric"].items())
+        lines.append(f"Numeric summary: {stats}.")
+    lines.append(f"Sample rows: {json.dumps(summary['sample'], ensure_ascii=False)[:1500]}")
+    lines.append("Build the interface using this user data (label it as user-provided).")
+    return "\n".join(lines)
 
 
 def _load_mcp_servers():
@@ -182,7 +267,8 @@ def gemini_error_message(error):
     return "Could not complete the Gemini response. Check the server connection and try again."
 
 
-async def run_agent_stream(user_message: str, lang: str = "es", context: str | None = None) -> AsyncIterator[str]:
+async def run_agent_stream(user_message: str, lang: str = "es", context: str | None = None,
+                     dataset_text: str | None = None) -> AsyncIterator[str]:
     yield event("status", content="Connecting to Gemini...")
     mcp_tools = []
     if MCP_ENABLED:
@@ -197,6 +283,8 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
         contents.append(types.Content(role="user", parts=[types.Part(
             text="Previous turn summary for continuity (adapt the new interface to it when relevant): " + context[:1500]
         )]))
+    if dataset_text:
+        contents.append(types.Content(role="user", parts=[types.Part(text=dataset_text)]))
     lang_note = "Reply in Spanish." if lang == "es" else "Reply in English."
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT + "\n" + lang_note,
@@ -281,9 +369,48 @@ async def serve_index():
 async def generate_interface(body: GenerateRequest):
     if not GEMINI_API_KEYS:
         raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY in the server .env file before generating.")
-    return StreamingResponse(run_agent_stream(body.message, body.lang, body.context), media_type="text/event-stream", headers={
+    dataset_text = load_dataset_context(body.dataset_id) if body.dataset_id else None
+    return StreamingResponse(run_agent_stream(body.message, body.lang, body.context, dataset_text), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
+
+
+@app.get("/api/datasets")
+async def list_datasets():
+    items = []
+    for path in sorted(UPLOAD_DIR.glob("*")):
+        if path.suffix not in DATASET_EXTS or not path.is_file():
+            continue
+        try:
+            columns, rows = _parse_dataset_rows(path)
+        except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        items.append({"id": path.stem, "name": path.name, "columns": columns, "n_rows": len(rows),
+                      "size": path.stat().st_size, "sample": rows[:3]})
+    return {"datasets": items}
+
+
+@app.post("/api/datasets")
+async def upload_dataset(file: UploadFile = File(...)):
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in DATASET_EXTS:
+        raise HTTPException(status_code=415, detail="Only .csv and .json files are accepted.")
+    raw = await file.read()
+    if not raw or len(raw) > DATASET_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File must be non-empty and under 2 MB.")
+    dataset_id = _safe_dataset_id(file.filename or "dataset")
+    path = UPLOAD_DIR / f"{dataset_id}{ext}"
+    path.write_bytes(raw)
+    try:
+        columns, rows = _parse_dataset_rows(path)
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail="Dataset could not be parsed.")
+    if not columns or not rows:
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail="Dataset is empty.")
+    return {"id": dataset_id, "name": path.name, "columns": columns, "n_rows": len(rows),
+            "size": len(raw), "sample": rows[:5]}
 
 
 @app.get("/api/tools")
