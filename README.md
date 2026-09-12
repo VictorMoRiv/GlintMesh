@@ -1,4 +1,4 @@
-# GlintMesh / FinFlow AI
+# GlintMesh
 
 Generador de interfaces financieras con una UI web, FastAPI y Gemini. El usuario escribe en la interfaz y recibe la respuesta progresivamente. Las solicitudes de dashboards generan HTML que se muestra en Preview, Code y Export; los saludos reciben una respuesta de texto.
 
