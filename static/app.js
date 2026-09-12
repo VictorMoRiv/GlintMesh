@@ -1,421 +1,358 @@
 import { readSSE } from './sse.mjs';
 
-// ─── State ──────────────────────────────────────────────────────────────────
-const state = {
-  isGenerating: false,
-  controller: null,
-  generatedHTML: '',
-  agentMessage: '',
-  toolCalls: [],
+// ─── i18n ─────────────────────────────────────────────────────────────────
+const I18N = {
+  es: {
+    subtitle: 'A2UI over MCP Interface Mesh', tools: 'Tools', clear: 'Limpiar', export: 'Exportar',
+    preview: 'Vista previa', a2ui: 'Superficie A2UI', code: 'Código', agent_status: 'Estado del agente',
+    ready: 'Listo para generar interfaces', tool_empty: 'Las llamadas MCP aparecerán aquí mientras trabaja el agente',
+    quick_prompts: 'Prompts rápidos', p1: 'Dashboard de portafolio', p2: 'Monitor de índices', p3: 'Analizador de riesgo',
+    p4: 'Calculadora de inversión', p5: 'Tablero forex', p6: 'Noticias financieras',
+    welcome_desc: 'Describe cualquier dashboard financiero en lenguaje natural. GlintMesh obtiene datos MCP y los renderiza como superficies A2UI en segundos.',
+    f1t: 'Datos de mercado', f1d: 'Cotizaciones, índices e historial en tiempo real', f2d: 'Superficies UI tipadas vía MCP',
+    f3d: 'Herramientas demo activadas (datos simulados)', f3d_off: 'MCP desactivado; Gemini genera con datos de ejemplo',
+    welcome_hint: 'Escribe abajo o elige un prompt rápido del sidebar',
+    a2ui_empty: 'Las superficies A2UI de las llamadas MCP se renderizarán aquí',
+    generated_html: 'HTML generado', copy: 'Copiar', disclaimer: 'GlintMesh puede producir datos financieros simulados con fines demostrativos',
+    placeholder: "Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'",
+    drawer_title: 'MCPs conectados', drawer_sub: 'Servidores y herramientas disponibles para el agente',
+    session_cleared: 'Sesión limpiada', no_export: 'Aún no hay interfaz para exportar', exported: 'Interfaz exportada',
+    copied: 'Código copiado', mcp_disabled: 'MCP desactivado. Gemini funciona sin herramientas.', mcp_error: 'No se pudieron obtener herramientas',
+    waiting: 'Esperando a Gemini...', generating: 'Generando interfaz...', analyzing: 'Analizando solicitud...',
+    done_ok: 'Interfaz generada correctamente', resp_ok: 'Respuesta recibida', failed: 'Generación fallida',
+  },
+  en: {
+    subtitle: 'A2UI over MCP Interface Mesh', tools: 'Tools', clear: 'Clear', export: 'Export',
+    preview: 'Preview', a2ui: 'A2UI Surface', code: 'Code', agent_status: 'Agent Status',
+    ready: 'Ready to generate interfaces', tool_empty: 'MCP tool calls will appear here as the agent works',
+    quick_prompts: 'Quick Prompts', p1: 'Portfolio dashboard', p2: 'Market indices monitor', p3: 'Credit risk analyzer',
+    p4: 'Investment calculator', p5: 'Forex rates board', p6: 'Financial news feed',
+    welcome_desc: 'Describe any financial dashboard in plain language. GlintMesh fetches MCP data and renders it as A2UI surfaces in seconds.',
+    f1t: 'Live Market Data', f1d: 'Real-time quotes, indices, and price history', f2d: 'Typed UI surfaces streamed over MCP',
+    f3d: 'Demo tools enabled (simulated data)', f3d_off: 'MCP disabled; Gemini generates with sample data',
+    welcome_hint: 'Type a request below or choose a quick prompt from the sidebar',
+    a2ui_empty: 'A2UI surfaces from MCP tool calls will render here',
+    generated_html: 'Generated HTML', copy: 'Copy', disclaimer: 'GlintMesh may produce simulated financial data for demonstration purposes',
+    placeholder: "Describe a financial interface... e.g. 'Build me a real-time stock portfolio dashboard'",
+    drawer_title: 'Connected MCPs', drawer_sub: 'Servers and tools available to the agent',
+    session_cleared: 'Session cleared', no_export: 'No interface to export yet', exported: 'Interface exported',
+    copied: 'Code copied to clipboard', mcp_disabled: 'MCP is disabled. Gemini works without tools.', mcp_error: 'Could not fetch tools',
+    waiting: 'Waiting for Gemini...', generating: 'Generating interface...', analyzing: 'Analyzing request...',
+    done_ok: 'Interface generated successfully', resp_ok: 'Response received', failed: 'Generation failed',
+  },
 };
+let lang = localStorage.getItem('glintmesh-lang') || 'es';
+if (!I18N[lang]) lang = 'es';
+const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k;
 
-// ─── DOM References ──────────────────────────────────────────────────────────
-const chatTextarea     = document.getElementById('chat-textarea');
-const sendBtn          = document.getElementById('send-btn');
-const toolFeed         = document.getElementById('tool-feed');
-const statusText       = document.getElementById('status-text');
-const welcomeState     = document.getElementById('welcome-state');
-const generatedWrapper = document.getElementById('generated-wrapper');
-const agentBubble      = document.getElementById('agent-bubble');
-const agentBubbleText  = document.getElementById('agent-bubble-text');
-const previewContainer = document.getElementById('preview-frame-container');
-const previewIframe    = document.getElementById('preview-iframe');
-const codeOutput       = document.getElementById('code-output');
-const progressBar      = document.getElementById('progress-bar-container');
-const progressLabel    = document.getElementById('progress-label');
-const charCount        = document.getElementById('char-count');
-const codeBadge        = document.getElementById('code-badge');
-const btnCopyCode      = document.getElementById('btn-copy-code');
+function applyLang(next) {
+  lang = I18N[next] ? next : 'es';
+  localStorage.setItem('glintmesh-lang', lang);
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    if (I18N[lang][key]) el.textContent = I18N[lang][key];
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+    el.placeholder = t(el.getAttribute('data-i18n-ph'));
+  });
+  document.getElementById('lang-es').classList.toggle('active', lang === 'es');
+  document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+}
 
-// ─── Tab Navigation ──────────────────────────────────────────────────────────
-document.querySelectorAll('.tab-btn').forEach(btn => {
+// ─── State ──────────────────────────────────────────────────────────────────
+const state = { isGenerating: false, controller: null, generatedHTML: '', agentMessage: '', toolCalls: [], a2ui: [] };
+
+const $ = (id) => document.getElementById(id);
+const chatTextarea = $('chat-textarea'), sendBtn = $('send-btn'), toolFeed = $('tool-feed'),
+  statusText = $('status-text'), welcomeState = $('welcome-state'), generatedWrapper = $('generated-wrapper'),
+  agentBubble = $('agent-bubble'), agentBubbleText = $('agent-bubble-text'),
+  previewContainer = $('preview-frame-container'), previewIframe = $('preview-iframe'),
+  codeOutput = $('code-output'), progressBar = $('progress-bar-container'), progressLabel = $('progress-label'),
+  charCount = $('char-count'), codeBadge = $('code-badge'), btnCopyCode = $('btn-copy-code'),
+  a2uiFeed = $('a2ui-feed'), a2uiBadge = $('a2ui-badge');
+
+document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
     btn.classList.add('active');
-    document.getElementById(`panel-${tab}`).classList.add('active');
+    $('panel-' + btn.dataset.tab).classList.add('active');
   });
 });
 
-// ─── Textarea Auto-resize ────────────────────────────────────────────────────
 chatTextarea.addEventListener('input', () => {
   chatTextarea.style.height = 'auto';
   chatTextarea.style.height = Math.min(chatTextarea.scrollHeight, 120) + 'px';
   const len = chatTextarea.value.length;
-  charCount.textContent = `${len} / 500`;
-  if (len > 450) charCount.style.color = 'var(--accent-amber)';
-  else charCount.style.color = 'var(--text-muted)';
+  charCount.textContent = len + ' / 500';
+  charCount.style.color = len > 450 ? 'var(--accent-amber)' : 'var(--text-muted)';
 });
-
-chatTextarea.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    handleSubmit();
-  }
+chatTextarea.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
 });
-
 sendBtn.addEventListener('click', handleSubmit);
+$('lang-es').addEventListener('click', () => { applyLang('es'); refreshConfigLabels(); });
+$('lang-en').addEventListener('click', () => { applyLang('en'); refreshConfigLabels(); });
 
-// ─── Suggestion Chips ────────────────────────────────────────────────────────
-document.querySelectorAll('.suggestion-chip').forEach(chip => {
+document.querySelectorAll('.suggestion-chip').forEach((chip) => {
   chip.addEventListener('click', () => {
-    chatTextarea.value = chip.dataset.prompt;
+    chatTextarea.value = chip.dataset[lang === 'es' ? 'promptEs' : 'promptEn'] || chip.dataset.promptEn;
     chatTextarea.dispatchEvent(new Event('input'));
     chatTextarea.focus();
     handleSubmit();
   });
 });
 
-// ─── Clear Button ────────────────────────────────────────────────────────────
-document.getElementById('btn-clear').addEventListener('click', () => {
-  state.controller?.abort();
-  state.controller = null;
-  state.isGenerating = false;
-  sendBtn.disabled = false;
-  progressBar.style.display = 'none';
-  previewIframe.srcdoc = '';
-  state.generatedHTML = '';
-  state.agentMessage = '';
-  state.toolCalls = [];
-  welcomeState.style.display = 'flex';
-  generatedWrapper.classList.remove('visible');
-  agentBubble.style.display = 'none';
-  previewContainer.style.display = 'none';
-  agentBubbleText.textContent = '';
+$('btn-clear').addEventListener('click', () => {
+  state.controller?.abort(); state.controller = null; state.isGenerating = false; state.a2ui = [];
+  sendBtn.disabled = false; progressBar.style.display = 'none'; previewIframe.srcdoc = '';
+  state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = [];
+  welcomeState.style.display = 'flex'; generatedWrapper.classList.remove('visible');
+  agentBubble.style.display = 'none'; previewContainer.style.display = 'none'; agentBubbleText.textContent = '';
   codeOutput.innerHTML = '<code style="color:var(--text-muted); font-size:12px;">// Generated code will appear here...</code>';
-  codeBadge.style.display = 'none';
-  btnCopyCode.style.display = 'none';
-  toolFeed.innerHTML = `<div style="text-align:center; padding:30px 16px; color:var(--text-muted); font-size:12px; line-height:1.6;">
-    <i class="bi bi-diagram-3" style="font-size:24px; display:block; margin-bottom:10px; color:var(--text-muted);"></i>
-    MCP tool calls will appear here as the agent works
-  </div>`;
-  setStatus('Ready to generate interfaces', '');
-  chatTextarea.value = '';
-  charCount.textContent = '0 / 500';
-  showToast('Session cleared', 'info');
+  codeBadge.style.display = 'none'; btnCopyCode.style.display = 'none'; a2uiBadge.style.display = 'none';
+  toolFeed.innerHTML = '<div style="text-align:center; padding:30px 16px; color:var(--text-muted); font-size:12px;">' + t('tool_empty') + '</div>';
+  a2uiFeed.innerHTML = '<div id="a2ui-empty" style="text-align:center; padding:60px 20px; color:var(--text-muted); font-size:13px;">' + t('a2ui_empty') + '</div>';
+  setStatus(t('ready'), ''); chatTextarea.value = ''; charCount.textContent = '0 / 500';
+  showToast(t('session_cleared'), 'info');
 });
 
-// ─── Export Button ───────────────────────────────────────────────────────────
-document.getElementById('btn-export').addEventListener('click', e => {
+$('btn-export').addEventListener('click', (e) => {
   e.preventDefault();
-  if (!state.generatedHTML) { showToast('No interface to export yet', 'error'); return; }
+  if (!state.generatedHTML) { showToast(t('no_export'), 'error'); return; }
   const blob = new Blob([state.generatedHTML], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `finflow-interface-${Date.now()}.html`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Interface exported', 'success');
+  a.href = url; a.download = 'glintmesh-interface-' + Date.now() + '.html'; a.click();
+  URL.revokeObjectURL(url); showToast(t('exported'), 'success');
 });
 
-// ─── Tools Button ────────────────────────────────────────────────────────────
-document.getElementById('btn-tools').addEventListener('click', async () => {
+// ─── Tools drawer: list connected MCPs, not just count ──────────────────────
+const drawer = $('tools-drawer'), overlay = $('tools-overlay');
+function openTools() { drawer.classList.add('open'); overlay.classList.add('open'); loadTools(); }
+function closeTools() { drawer.classList.remove('open'); overlay.classList.remove('open'); }
+$('btn-tools').addEventListener('click', openTools);
+$('btn-close-tools').addEventListener('click', closeTools);
+overlay.addEventListener('click', closeTools);
+
+async function loadTools() {
+  const list = $('tools-list');
+  list.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);padding:8px;">Loading…</div>';
   try {
-    const res = await fetch('/api/tools');
-    const data = await res.json();
-    if (!res.ok) throw new Error('Tools unavailable');
+    const [healthRes, toolsRes] = await Promise.all([fetch('/health'), fetch('/api/tools')]);
+    const health = await healthRes.json().catch(() => ({}));
+    const data = await toolsRes.json().catch(() => ({}));
+    if (!toolsRes.ok) throw new Error('unavailable');
+    const server = health.mcp_server || 'finflow-financial-tools';
+    const protocol = health.protocol || 'A2UI over MCP';
     if (!data.enabled) {
-      showToast('MCP is disabled. Gemini works without tools.', 'info');
-    } else if (data.tools) {
-      showToast(`${data.tools.length} MCP tools available`, 'info');
+      list.innerHTML = '<div class="mcp-tool"><div class="mcp-name"><span class="mcp-dot off"></span>' + server + '</div>'
+        + '<div class="mcp-desc">' + t('mcp_disabled') + ' (' + protocol + ')</div></div>';
+      return;
     }
-  } catch(e) {
-    showToast('Could not fetch tools', 'error');
-  }
-});
+    const tools = data.tools || [];
+    let html = '<div class="mcp-server-row"><i class="bi bi-hdd-network"></i>' + server + ' &bull; ' + protocol + ' &bull; ' + tools.length + '</div>';
+    html += tools.map((tl) => '<div class="mcp-tool"><div class="mcp-name"><span class="mcp-dot"></span>' + escapeHtml(tl.name) + '</div>'
+      + '<div class="mcp-desc">' + escapeHtml(tl.description || '') + '</div>'
+      + '<details><summary>schema</summary><pre>' + escapeHtml(JSON.stringify(tl.parameters || {}, null, 2)) + '</pre></details></div>').join('');
+    list.innerHTML = html || '<div style="font-size:12px;">No tools</div>';
+  } catch (e) { showToast(t('mcp_error'), 'error'); list.innerHTML = '<div style="font-size:12px;color:var(--accent-red);">MCP unreachable</div>'; }
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
-// ─── Preview Actions ─────────────────────────────────────────────────────────
-document.getElementById('btn-reload-preview').addEventListener('click', () => {
-  if (state.generatedHTML) renderPreview(state.generatedHTML);
-});
-
-document.getElementById('btn-fullscreen').addEventListener('click', () => {
+$('btn-reload-preview').addEventListener('click', () => { if (state.generatedHTML) renderPreview(state.generatedHTML); });
+$('btn-fullscreen').addEventListener('click', () => {
   if (!state.generatedHTML) return;
   const frame = document.createElement('iframe');
-  frame.setAttribute('sandbox', 'allow-scripts');
-  frame.setAttribute('title', 'Generated Financial Interface');
-  frame.style.cssText = 'border:0;width:100%;height:100vh';
-  frame.srcdoc = state.generatedHTML;
-  const wrapper = '<!doctype html><html><head><title>FinFlow Preview</title></head><body style="margin:0">' + frame.outerHTML + '</body></html>';
-  const url = URL.createObjectURL(new Blob([wrapper], { type: 'text/html' }));
-  window.open(url, '_blank', 'noopener,noreferrer');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  frame.setAttribute('sandbox', 'allow-scripts'); frame.style.cssText = 'border:0;width:100%;height:100vh'; frame.srcdoc = state.generatedHTML;
+  const url = URL.createObjectURL(new Blob(['<!doctype html><html><head><title>GlintMesh Preview</title></head><body style="margin:0">' + frame.outerHTML + '</body></html>'], { type: 'text/html' }));
+  window.open(url, '_blank', 'noopener,noreferrer'); setTimeout(() => URL.revokeObjectURL(url), 60000);
 });
-
-// ─── Copy Code ───────────────────────────────────────────────────────────────
 btnCopyCode.addEventListener('click', async () => {
   if (!state.generatedHTML) return;
-  await navigator.clipboard.writeText(state.generatedHTML);
-  showToast('Code copied to clipboard', 'success');
+  await navigator.clipboard.writeText(state.generatedHTML); showToast(t('copied'), 'success');
 });
 
-// ─── Main Submit Handler ─────────────────────────────────────────────────────
+// ─── Submit ─────────────────────────────────────────────────────────────────
 async function handleSubmit() {
   const message = chatTextarea.value.trim();
   if (!message || state.isGenerating) return;
-  if (message.length > 500) {
-    showToast('Use at most 500 characters per request.', 'error');
-    return;
-  }
-
+  if (message.length > 500) return;
   const controller = new AbortController();
-  state.controller = controller;
-  state.isGenerating = true;
-  state.generatedHTML = '';
-  state.agentMessage = '';
-  state.toolCalls = [];
-  chatTextarea.value = '';
-  chatTextarea.style.height = 'auto';
-  charCount.textContent = '0 / 500';
-  sendBtn.disabled = true;
-  progressBar.style.display = 'flex';
-  welcomeState.style.display = 'none';
-  generatedWrapper.classList.add('visible');
-  agentBubble.style.display = 'flex';
-  agentBubbleText.textContent = 'Waiting for Gemini...';
-  toolFeed.innerHTML = '';
-  codeOutput.textContent = '';
-  codeBadge.style.display = 'none';
-  btnCopyCode.style.display = 'none';
-  previewContainer.style.display = 'none';
-  previewIframe.srcdoc = '';
-  setStatus('Analyzing request...', 'active');
+  state.controller = controller; state.isGenerating = true;
+  state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.a2ui = [];
+  chatTextarea.value = ''; chatTextarea.style.height = 'auto'; charCount.textContent = '0 / 500';
+  sendBtn.disabled = true; progressBar.style.display = 'flex';
+  welcomeState.style.display = 'none'; generatedWrapper.classList.add('visible');
+  agentBubble.style.display = 'flex'; agentBubbleText.textContent = t('waiting');
+  toolFeed.innerHTML = ''; codeOutput.textContent = ''; codeOutput.classList.add('streaming');
+  codeBadge.style.display = 'none'; btnCopyCode.style.display = 'none'; a2uiBadge.style.display = 'none';
+  a2uiFeed.innerHTML = ''; previewContainer.style.display = 'none'; previewIframe.srcdoc = '';
+  setStatus(t('analyzing'), 'active');
 
-  let fullText = '';
-  let completed = false;
+  let fullText = '', completed = false;
   try {
     const response = await fetch('/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
-      signal: controller.signal,
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, lang }), signal: controller.signal,
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(typeof body.detail === 'string' ? body.detail : 'The request could not be processed. Check your message and try again.');
+      throw new Error(typeof body.detail === 'string' ? body.detail : 'request failed');
     }
     for await (const event of readSSE(response.body)) {
       if (controller.signal.aborted) return;
       if (event.type === 'error') throw new Error(event.content);
       handleSSEEvent(event);
       if (event.type === 'text_chunk') {
-        fullText += event.content;
-        codeOutput.textContent = fullText;
+        fullText += event.content; codeOutput.textContent = fullText;
         const htmlStart = fullText.indexOf('```html');
-        agentBubbleText.textContent = htmlStart === -1
-          ? fullText
-          : fullText.slice(0, htmlStart).trim() || 'Generating interface...';
-      } else if (event.type === 'done') {
-        completed = true;
-        finalize(fullText);
-        break;
-      }
+        agentBubbleText.textContent = htmlStart === -1 ? fullText : (fullText.slice(0, htmlStart).trim() || t('generating'));
+      } else if (event.type === 'done') { completed = true; finalize(fullText); break; }
     }
-    if (!completed && !controller.signal.aborted) throw new Error('The response was interrupted. Please try again.');
+    if (!completed && !controller.signal.aborted) throw new Error('interrupted');
   } catch (error) {
     if (!controller.signal.aborted) {
-      setStatus('Generation failed', 'error');
-      agentBubbleText.textContent = error.message;
-      showToast(error.message, 'error');
-      if (!chatTextarea.value) {
-        chatTextarea.value = message;
-        chatTextarea.dispatchEvent(new Event('input'));
-      }
+      setStatus(t('failed'), 'error'); agentBubbleText.textContent = error.message; showToast(error.message, 'error');
+      if (!chatTextarea.value) { chatTextarea.value = message; chatTextarea.dispatchEvent(new Event('input')); }
     }
   } finally {
-    if (state.controller === controller) {
-      state.controller = null;
-      state.isGenerating = false;
-      sendBtn.disabled = false;
-      progressBar.style.display = 'none';
-    }
+    codeOutput.classList.remove('streaming');
+    if (state.controller === controller) { state.controller = null; state.isGenerating = false; sendBtn.disabled = false; progressBar.style.display = 'none'; }
   }
 }
+
+function a2uiKind(tool) {
+  if (/historical|chart|prices/i.test(tool)) return 'chart';
+  if (/portfolio|forex|indices|news/i.test(tool)) return 'table';
+  if (/credit|compound/i.test(tool)) return 'form';
+  return 'card';
+}
+
 function handleSSEEvent(event) {
-  switch(event.type) {
-    case 'status':
-      setStatus(event.content, 'active');
-      progressLabel.textContent = event.content;
+  switch (event.type) {
+    case 'status': setStatus(event.content, 'active'); progressLabel.textContent = event.content; break;
+    case 'tool_call': {
+      setStatus(event.content, 'active'); progressLabel.textContent = event.content;
+      const name = event.content.replace('Fetching ', '').replace('...', '');
+      addToolCard(name, 'calling');
+      addA2UICard(name, null, true);
       break;
-
-    case 'tool_call':
-      setStatus(event.content, 'active');
-      progressLabel.textContent = event.content;
-      addToolCard(event.content.replace('Fetching ', '').replace('...', ''), 'calling');
-      break;
-
+    }
     case 'tool_result': {
-      // Update last tool card to done
       const cards = toolFeed.querySelectorAll('.tool-card');
       if (cards.length > 0) {
         const last = cards[cards.length - 1];
         const icon = last.querySelector('.tool-status-icon');
-        if (icon) {
-          icon.className = 'tool-status-icon ' + (event.failed ? 'error' : 'done');
-          icon.innerHTML = event.failed ? '<i class="bi bi-x"></i>' : '<i class="bi bi-check"></i>';
-        }
-        // Show brief data summary
+        if (icon) { icon.className = 'tool-status-icon ' + (event.failed ? 'error' : 'done'); icon.innerHTML = event.failed ? '<i class="bi bi-x"></i>' : '<i class="bi bi-check"></i>'; }
         const dataDiv = last.querySelector('.tool-data');
-        if (dataDiv && event.data) {
-          const snippet = JSON.stringify(event.data).slice(0, 120) + '...';
-          dataDiv.textContent = snippet;
-        }
+        if (dataDiv && event.data) dataDiv.textContent = JSON.stringify(event.data).slice(0, 140) + '...';
       }
+      updateA2UICard(event.tool, event.data, event.failed);
       break;
     }
-
-    case 'error':
-      setStatus(event.content, 'error');
-      agentBubbleText.textContent = 'Error: ' + event.content;
-      showToast(event.content, 'error');
-      break;
+    case 'error': setStatus(event.content, 'error'); agentBubbleText.textContent = 'Error: ' + event.content; showToast(event.content, 'error'); break;
   }
 }
 
 function addToolCard(name, status = 'calling') {
-  const card = document.createElement('div');
-  card.className = 'tool-card';
-
-  const iconClass = status === 'calling' ? 'calling' : 'done';
-  const iconContent = status === 'calling'
-    ? '<i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite;"></i>'
-    : '<i class="bi bi-check"></i>';
-
-  card.innerHTML = `
-    <div class="tool-name">
-      <div class="tool-status-icon ${iconClass}">${iconContent}</div>
-      ${name.replace(/_/g, ' ')}
-    </div>
-    <div class="tool-data">Calling MCP tool...</div>
-  `;
-
-  // Style for spin animation
-  const styleEl = document.getElementById('spin-style');
-  if (!styleEl) {
-    const s = document.createElement('style');
-    s.id = 'spin-style';
+  const card = document.createElement('div'); card.className = 'tool-card';
+  const iconContent = status === 'calling' ? '<i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite;"></i>' : '<i class="bi bi-check"></i>';
+  card.innerHTML = '<div class="tool-name"><div class="tool-status-icon ' + status + '">' + iconContent + '</div><span></span><span class="proto-badge mcp">MCP</span></div><div class="tool-data">Calling MCP tool...</div>';
+  card.querySelector('.tool-name span').textContent = name.replace(/_/g, ' ');
+  if (!document.getElementById('spin-style')) {
+    const s = document.createElement('style'); s.id = 'spin-style';
     s.textContent = '@keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }';
     document.head.appendChild(s);
   }
-
-  // Remove empty state if present
-  const emptyState = toolFeed.querySelector('div[style*="text-align"]');
-  if (emptyState) emptyState.remove();
-
-  toolFeed.appendChild(card);
-  toolFeed.scrollTop = toolFeed.scrollHeight;
+  toolFeed.appendChild(card); toolFeed.scrollTop = toolFeed.scrollHeight;
   return card;
 }
 
+function addA2UICard(tool, data, pending) {
+  const empty = $('a2ui-empty'); if (empty) empty.remove();
+  const card = document.createElement('div'); card.className = 'a2ui-card'; card.dataset.tool = tool;
+  const kind = a2uiKind(tool);
+  card.innerHTML = '<div class="a2ui-head"><span class="proto-badge">A2UI</span><span class="proto-badge mcp">MCP</span><span></span><span style="margin-left:auto;font-size:10px;color:var(--text-muted);"></span></div><pre></pre>';
+  card.querySelector('.a2ui-head span:nth-child(3)').textContent = tool;
+  card.querySelector('.a2ui-head span:last-child').textContent = kind;
+  card.querySelector('pre').textContent = pending ? '…' : JSON.stringify(data, null, 2);
+  a2uiFeed.appendChild(card);
+  state.a2ui.push(tool);
+  a2uiBadge.style.display = 'inline-flex'; a2uiBadge.textContent = state.a2ui.length;
+}
+function updateA2UICard(tool, data, failed) {
+  const cards = a2uiFeed.querySelectorAll('.a2ui-card');
+  for (let i = cards.length - 1; i >= 0; i--) {
+    if (cards[i].dataset.tool === tool && cards[i].querySelector('pre').textContent === '…') {
+      cards[i].querySelector('pre').textContent = failed ? 'MCP tool failed' : JSON.stringify(data, null, 2).slice(0, 4000);
+      cards[i].style.borderLeftColor = failed ? 'var(--accent-red)' : 'var(--accent-green)';
+      return;
+    }
+  }
+}
+
 function finalize(fullText) {
-  // Extract agent message (before ```html)
   const htmlStart = fullText.indexOf('```html');
   if (htmlStart !== -1) {
     const preText = fullText.slice(0, htmlStart).trim();
-    if (preText) {
-      agentBubbleText.textContent = preText;
-    } else {
-      agentBubble.style.display = 'none';
-    }
-
-    // Extract HTML
+    if (preText) agentBubbleText.textContent = preText; else agentBubble.style.display = 'none';
     const extractStart = htmlStart + 7;
     const htmlEnd = fullText.lastIndexOf('```');
-    if (htmlEnd > extractStart) {
-      state.generatedHTML = fullText.slice(extractStart, htmlEnd).trim();
-    } else {
-      state.generatedHTML = fullText.slice(extractStart).trim();
-    }
-
-    // Render preview
+    state.generatedHTML = (htmlEnd > extractStart ? fullText.slice(extractStart, htmlEnd) : fullText.slice(extractStart)).trim();
     if (state.generatedHTML) {
-      renderPreview(state.generatedHTML);
-      codeBadge.style.display = 'inline-flex';
-      btnCopyCode.style.display = 'flex';
-      showToast('Interface generated successfully', 'success');
+      renderPreview(state.generatedHTML); codeBadge.style.display = 'inline-flex'; btnCopyCode.style.display = 'flex';
+      showToast(t('done_ok'), 'success');
     }
-  } else {
-    // No HTML block, just show text
-    agentBubbleText.textContent = fullText;
-    showToast('Response received', 'info');
-  }
-
-  // Final code display with syntax highlighting
+  } else { agentBubbleText.textContent = fullText; showToast(t('resp_ok'), 'info'); }
   if (state.generatedHTML) {
-    try {
-      const highlighted = hljs.highlight(state.generatedHTML, { language: 'html' }).value;
-      codeOutput.innerHTML = highlighted;
-    } catch(e) {
-      codeOutput.textContent = state.generatedHTML;
-    }
+    try { codeOutput.innerHTML = hljs.highlight(state.generatedHTML, { language: 'html' }).value; }
+    catch (e) { codeOutput.textContent = state.generatedHTML; }
   }
-
-  setStatus(state.generatedHTML ? 'Interface generated successfully' : 'Response received', 'success');
+  setStatus(state.generatedHTML ? t('done_ok') : t('resp_ok'), 'success');
   progressBar.style.display = 'none';
 }
 
 function renderPreview(html) {
   previewContainer.style.display = 'block';
-  const iframe = previewIframe;
-  iframe.srcdoc = html;
-
-  // Adjust iframe height after load
-  iframe.onload = () => {
+  previewIframe.srcdoc = html;
+  previewIframe.onload = () => {
     try {
-      const body = iframe.contentDocument.body;
-      const h = Math.max(body.scrollHeight, 500);
-      iframe.style.height = Math.min(h, 800) + 'px';
-    } catch(e) {
-      iframe.style.height = '600px';
-    }
+      const h = Math.max(previewIframe.contentDocument.body.scrollHeight, 500);
+      previewIframe.style.height = Math.min(h, 800) + 'px';
+    } catch (e) { previewIframe.style.height = '600px'; }
   };
 }
 
-function setStatus(text, type = '') {
-  statusText.textContent = text;
-  statusText.className = type ? `active ${type}` : '';
-}
-
-// ─── Toast ───────────────────────────────────────────────────────────────────
+function setStatus(text, type = '') { statusText.textContent = text; statusText.className = type ? 'active ' + type : ''; }
 function showToast(message, type = 'info') {
-  const container = document.getElementById('toast-container');
+  const container = $('toast-container');
   const icons = { success: 'bi-check-circle-fill', error: 'bi-x-circle-fill', info: 'bi-info-circle-fill' };
-  const colors = { success: 'var(--accent-green)', error: 'var(--accent-red)', info: 'var(--accent-blue)' };
-
-  const toast = document.createElement('div');
-  toast.className = `toast-item ${type}`;
-  toast.innerHTML = `
-    <i class="bi ${icons[type] || icons.info}" style="color:${colors[type] || colors.info}; font-size:16px; flex-shrink:0;"></i>
-    <span></span>
-  `;
-  toast.querySelector('span').textContent = message;
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(10px)';
-    toast.style.transition = 'all 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
-  }, 3500);
+  const colors = { success: 'var(--accent-green)', error: 'var(--accent-red)', info: 'var(--accent-cyan)' };
+  const el = document.createElement('div'); el.className = 'toast-item ' + type;
+  el.innerHTML = '<i class="bi ' + (icons[type] || icons.info) + '" style="color:' + (colors[type] || colors.info) + '; font-size:16px;"></i><span></span>';
+  el.querySelector('span').textContent = message; container.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'all .3s ease'; setTimeout(() => el.remove(), 300); }, 3500);
 }
 
+let cachedHealth = null;
 async function loadConfiguration() {
-  const badge = document.getElementById('connection-status');
   try {
-    const response = await fetch('/health');
-    if (!response.ok) throw new Error('Backend unavailable');
-    const config = await response.json();
-    badge.textContent = config.gemini_configured ? 'Gemini configured' : 'Gemini key required';
-    document.getElementById('model-description').textContent = `Model: ${config.model}`;
-    document.getElementById('mcp-description').textContent = config.mcp_enabled
-      ? 'MCP demo tools enabled (simulated data)'
-      : 'MCP disabled; Gemini can generate with sample data';
-    if (!config.gemini_configured && !state.isGenerating) setStatus('Configure GEMINI_API_KEY on the server', 'error');
-  } catch {
-    badge.textContent = 'Backend unavailable';
-    if (!state.isGenerating) setStatus('Start the Python server to use Gemini', 'error');
-  }
+    const res = await fetch('/health');
+    if (!res.ok) throw new Error('down');
+    cachedHealth = await res.json();
+    refreshConfigLabels();
+    if (!cachedHealth.gemini_configured && !state.isGenerating) setStatus('GEMINI_API_KEY missing', 'error');
+  } catch { if (!state.isGenerating) setStatus('Start the Python server', 'error'); }
 }
+function refreshConfigLabels() {
+  if (!cachedHealth) return;
+  $('model-description').textContent = 'Model: ' + cachedHealth.model + ' • A2UI over MCP • v' + (cachedHealth.version || '2.0.0');
+  const mcpEl = $('mcp-description');
+  if (mcpEl) mcpEl.textContent = cachedHealth.mcp_enabled ? t('f3d') : t('f3d_off');
+  const v = $('version-label');
+  if (v) v.textContent = 'GlintMesh • v' + (cachedHealth.version || '2.0.0');
+}
+applyLang(lang);
 loadConfiguration();

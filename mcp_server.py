@@ -1,15 +1,19 @@
 """
-MCP Server for FinFlow AI - Financial Interface Generator
+MCP Server for GlintMesh - Financial Interface Generator
 Provides tools for financial data retrieval and analysis.
-Uses the official MCP Python SDK v1 FastMCP server.
+Compatible with MCP Python SDK v1 (FastMCP) and v2 (MCPServer).
 """
 
 import json
 import random
 from datetime import datetime, timedelta
-from mcp.server.fastmcp import FastMCP
 
-server = FastMCP("finflow-financial-tools")
+try:
+    from mcp.server.fastmcp import FastMCP
+    server = FastMCP("finflow-financial-tools")
+except ModuleNotFoundError:
+    from mcp.server.mcpserver import MCPServer
+    server = MCPServer("finflow-financial-tools")
 
 
 # ─── MCP Tool Definitions (using .tool() decorator) ──────────────────────────

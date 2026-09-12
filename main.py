@@ -21,10 +21,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
 MCP_ENABLED = os.getenv("MCP_ENABLED", "false").lower() in {"true", "1", "yes"}
 
-app = FastAPI(title="FinFlow AI", version="1.1.0")
+app = FastAPI(title="GlintMesh", version="2.0.0")
 
-SYSTEM_PROMPT = """You are FinFlow AI, an assistant that builds financial web interfaces.
-Respond in the user's language. For greetings or general questions, reply briefly in plain text.
+SYSTEM_PROMPT = """You are GlintMesh, an assistant that builds financial web interfaces over MCP with A2UI surfaces.
+Respond in the user's language (Spanish 'es' or English 'en' as instructed in the user message prefix).
+For greetings or general questions, reply briefly in plain text in that language.
 For an interface request, briefly explain what you are building, then return a complete HTML
  document in a fenced ```html block. Include inline CSS and JavaScript. Use Bootstrap 5 via CDN,
 Chart.js when useful, a dark theme (#0a0e27 to #1a1f4e), glassmorphism cards, and blue accents.
@@ -32,11 +33,13 @@ Do not use emojis. Make the interface responsive and format financial numbers cl
 Never describe invented or simulated numbers as live data. When no data source is available,
 use clearly labeled sample data or the user's supplied values. The bundled MCP tools also
 return simulated demonstration data: label it as such. Do not invent a successful tool result.
+When MCP tools are used, structure the visible output as A2UI-style surfaces (cards, charts, tables).
 """
 
 
 class GenerateRequest(BaseModel):
     message: str = Field(min_length=1, max_length=500)
+    lang: str = Field(default="es", pattern="^(es|en)$")
 
     @field_validator("message", mode="before")
     @classmethod
@@ -46,6 +49,15 @@ class GenerateRequest(BaseModel):
 
 def event(kind: str, **payload) -> str:
     return f"data: {json.dumps({'type': kind, **payload}, ensure_ascii=False)}\n\n"
+
+
+def _tool_schema(tool):
+    """MCP v1 uses inputSchema, v2 uses input_schema."""
+    return getattr(tool, "inputSchema", None) or getattr(tool, "input_schema", None) or {}
+
+
+def _result_is_error(result) -> bool:
+    return bool(getattr(result, "isError", getattr(result, "is_error", False)))
 
 
 class MCPFinancialClient:
@@ -66,9 +78,13 @@ class MCPFinancialClient:
                     if tool_name is None:
                         return (await session.list_tools()).tools
                     result = await session.call_tool(tool_name, tool_args or {})
-                    if result.isError:
+                    if _result_is_error(result):
                         raise RuntimeError("MCP tool failed")
-                    text = "\n".join(part.text for part in result.content if part.type == "text")
+                    text = "\n".join(
+                        getattr(part, "text", "")
+                        for part in result.content
+                        if getattr(part, "type", None) == "text"
+                    )
                     try:
                         return json.loads(text)
                     except json.JSONDecodeError:
@@ -90,7 +106,7 @@ def build_gemini_tools(mcp_tools):
     declarations = [types.FunctionDeclaration(
         name=tool.name,
         description=tool.description or tool.name,
-        parameters_json_schema=tool.inputSchema,
+        parameters_json_schema=_tool_schema(tool),
     ) for tool in mcp_tools]
     return [types.Tool(function_declarations=declarations)] if declarations else []
 
@@ -108,7 +124,7 @@ def gemini_error_message(error):
     return "Could not complete the Gemini response. Check the server connection and try again."
 
 
-async def run_agent_stream(user_message: str) -> AsyncIterator[str]:
+async def run_agent_stream(user_message: str, lang: str = "es") -> AsyncIterator[str]:
     yield event("status", content="Connecting to Gemini...")
     mcp_tools = []
     if MCP_ENABLED:
@@ -119,8 +135,9 @@ async def run_agent_stream(user_message: str) -> AsyncIterator[str]:
             return
 
     contents = [types.Content(role="user", parts=[types.Part(text=user_message)])]
+    lang_note = "Reply in Spanish." if lang == "es" else "Reply in English."
     config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
+        system_instruction=SYSTEM_PROMPT + "\n" + lang_note,
         tools=build_gemini_tools(mcp_tools) or None,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         temperature=0.7,
@@ -194,7 +211,7 @@ async def serve_index():
 async def generate_interface(body: GenerateRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY in the server .env file before generating.")
-    return StreamingResponse(run_agent_stream(body.message), media_type="text/event-stream", headers={
+    return StreamingResponse(run_agent_stream(body.message, body.lang), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
 
@@ -206,7 +223,7 @@ async def list_tools():
     try:
         tools = await mcp_client.list_tools()
         return {"enabled": True, "tools": [
-            {"name": tool.name, "description": tool.description, "parameters": tool.inputSchema}
+            {"name": tool.name, "description": tool.description, "parameters": _tool_schema(tool)}
             for tool in tools
         ]}
     except Exception:
@@ -215,8 +232,9 @@ async def list_tools():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "FinFlow AI", "version": "1.1.0",
-            "gemini_configured": bool(GEMINI_API_KEY), "model": GEMINI_MODEL, "mcp_enabled": MCP_ENABLED}
+    return {"status": "ok", "service": "GlintMesh", "version": "2.0.0",
+            "gemini_configured": bool(GEMINI_API_KEY), "model": GEMINI_MODEL, "mcp_enabled": MCP_ENABLED,
+            "mcp_server": "finflow-financial-tools", "protocol": "A2UI over MCP"}
 
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
