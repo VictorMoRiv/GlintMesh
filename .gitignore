@@ -9,3 +9,4 @@ node_modules/
 .test-artifacts/
 uploads/
 shares/
+alerts.json

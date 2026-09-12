@@ -299,6 +299,11 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         <i class="bi bi-database"></i>
         <span data-i18n="data">Data</span>
       </button>
+      <button class="btn-glass" id="btn-alerts" title="Price alerts">
+        <i class="bi bi-bell"></i>
+        <span data-i18n="alerts">Alerts</span>
+        <span id="alerts-badge" style="display:none; background:rgba(239,68,68,0.25); border:1px solid rgba(239,68,68,0.5); color:#f87171; font-size:10px; font-weight:700; padding:0 6px; border-radius:10px;">0</span>
+      </button>
       <button class="btn-glass" id="btn-settings" title="Generation settings" style="position:relative;">
         <i class="bi bi-gear"></i>
         <span id="settings-dot" style="display:none; position:absolute; top:4px; right:4px; width:7px; height:7px; border-radius:50%; background:#34d399;"></span>
@@ -399,6 +404,7 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
               <div class="agent-avatar"><i class="bi bi-robot" style="color:#fff; font-size:12px;"></i></div>
               <div id="agent-bubble-text"></div>
             </div>
+            <button class="btn-glass" id="btn-retry" style="display:none; align-self:flex-start; border-color:rgba(245,158,11,0.5); color:var(--accent-amber);"><i class="bi bi-arrow-clockwise"></i> <span data-i18n="retry">Retry</span></button>
             <div id="preview-frame-container" style="display:none;">
               <div class="preview-topbar">
                 <div class="preview-dots"><div class="preview-dot dot-red"></div><div class="preview-dot dot-yellow"></div><div class="preview-dot dot-green"></div></div>
@@ -415,6 +421,7 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         <div class="panel" id="panel-a2ui">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
             <button class="btn-glass btn-sm" id="btn-refresh-data"><i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh_data">Refresh data</span></button>
+            <button class="btn-glass btn-sm" id="btn-compose"><i class="bi bi-grid-1x2-fill"></i> <span data-i18n="compose">Compose dashboard</span></button>
             <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); cursor:pointer;">
               <input type="checkbox" id="auto-refresh" style="accent-color:#34d399;" /> <span data-i18n="auto_60">Auto 60s</span>
             </label>
@@ -572,6 +579,30 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
 </div>
 
 <div id="toast-container"></div>
+
+<!-- Alerts modal -->
+<div id="alerts-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
+<div id="alerts-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(480px,94vw); max-height:84vh; overflow-y:auto; background:rgba(10,15,40,0.95); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-bell" style="color:#fbbf24;"></i> <span data-i18n="alerts_title">Price alerts</span></h5>
+    <button class="btn-glass" id="btn-close-alerts" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="alerts_sub">Server checks live quotes every 5 min. No Gemini quota used.</p>
+  <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
+    <input id="alert-symbol" maxlength="12" placeholder="AAPL" style="flex:1; min-width:80px; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--text-primary); outline:none; text-transform:uppercase;" />
+    <select id="alert-op" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--text-primary); outline:none;">
+      <option value="below">below</option>
+      <option value="above">above</option>
+    </select>
+    <input id="alert-target" type="number" min="0" step="0.01" placeholder="150.00" style="flex:1; min-width:90px; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--text-primary); outline:none;" />
+    <button class="btn-glass" id="btn-add-alert" style="border-color:rgba(52,211,153,0.4); color:#34d399;"><i class="bi bi-plus"></i></button>
+  </div>
+  <div style="display:flex; gap:8px; margin-bottom:12px;">
+    <button class="btn-glass btn-sm" id="btn-check-alerts"><i class="bi bi-arrow-clockwise"></i> <span data-i18n="check_now">Check now</span></button>
+    <span id="alerts-note" style="font-size:11px; color:var(--text-muted); align-self:center;"></span>
+  </div>
+  <div id="alerts-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>

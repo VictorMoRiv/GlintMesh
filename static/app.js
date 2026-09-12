@@ -77,6 +77,8 @@ const I18N = {
 };
 let lang = localStorage.getItem('glintmesh-lang') || 'es';
 if (!I18N[lang]) lang = 'es';
+Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', alerts: 'Alertas', alerts_title: 'Alertas de precio', alerts_sub: 'El servidor revisa cotizaciones en vivo cada 5 min. Sin gastar cuota de Gemini.', check_now: 'Revisar ahora', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', alert_added: 'Alerta guardada', alert_deleted: 'Alerta borrada', no_alerts: 'Sin alertas. Crea la primera arriba.' });
+Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', alerts: 'Alerts', alerts_title: 'Price alerts', alerts_sub: 'Server checks live quotes every 5 min. No Gemini quota used.', check_now: 'Check now', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', alert_added: 'Alert saved', alert_deleted: 'Alert deleted', no_alerts: 'No alerts yet. Create the first one above.' });
 const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k;
 
 function applyLang(next) {
@@ -95,7 +97,7 @@ function applyLang(next) {
 }
 
 // ─── State ──────────────────────────────────────────────────────────────────
-const state = { isGenerating: false, controller: null, generatedHTML: '', agentMessage: '', toolCalls: [], a2ui: [], charts: [], lastSummary: '' };
+const state = { isGenerating: false, controller: null, generatedHTML: '', agentMessage: '', toolCalls: [], toolResults: {}, a2ui: [], charts: [], lastSummary: '', lastPayload: null, lastError: '' };
 const SESSION_KEY = 'glintmesh-session-v1';
 
 const $ = (id) => document.getElementById(id);
@@ -614,8 +616,9 @@ async function handleSubmit() {
   if (message.length > 500) return;
   const controller = new AbortController();
   state.controller = controller; state.isGenerating = true;
-  state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.a2ui = [];
+  state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.toolResults = {}; state.a2ui = [];
   destroyA2UICharts();
+  $('btn-retry').style.display = 'none'; state.lastError = '';
   chatTextarea.value = ''; chatTextarea.style.height = 'auto'; charCount.textContent = '0 / 500';
   sendBtn.disabled = true; progressBar.style.display = 'flex';
   welcomeState.style.display = 'none'; generatedWrapper.classList.add('visible');
@@ -634,6 +637,7 @@ async function handleSubmit() {
     if (genModel) payload.model = genModel;
     if (genTemp !== 0.7) payload.temperature = genTemp;
     if (genMode === 'data') payload.mode = 'data';
+    state.lastPayload = { ...payload };
     const response = await fetch('/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: controller.signal,
@@ -656,6 +660,8 @@ async function handleSubmit() {
   } catch (error) {
     if (!controller.signal.aborted) {
       setStatus(t('failed'), 'error'); agentBubbleText.textContent = error.message; showToast(error.message, 'error');
+      state.lastError = error.message || '';
+      $('btn-retry').style.display = 'inline-flex';
       if (!chatTextarea.value) { chatTextarea.value = message; chatTextarea.dispatchEvent(new Event('input')); }
     }
   } finally {
@@ -826,6 +832,7 @@ function handleSSEEvent(event) {
         const dataDiv = last.querySelector('.tool-data');
         if (dataDiv && event.data) dataDiv.textContent = JSON.stringify(event.data).slice(0, 140) + '...';
       }
+      if (event.tool) state.toolResults[event.tool] = { data: event.data, failed: !!event.failed };
       updateA2UICard(event.tool, event.data, event.failed);
       break;
     }
@@ -967,6 +974,108 @@ function showToast(message, type = 'info') {
 }
 
 let cachedHealth = null;
+// ─── 3. Retry 1-clic ────────────────────────────────────────────────────────
+$('btn-retry').addEventListener('click', () => {
+  if (state.isGenerating) return;
+  $('btn-retry').style.display = 'none';
+  const p = state.lastPayload;
+  if (p && p.message) {
+    chatTextarea.value = p.message;
+    chatTextarea.dispatchEvent(new Event('input'));
+  }
+  handleSubmit(true);
+});
+
+// ─── 4. Compose: combina N superficies A2UI en 1 dashboard (sin cuota) ──────
+$('btn-compose').addEventListener('click', () => {
+  const entries = Object.entries(state.toolResults || {}).filter(([, v]) => v && !v.failed);
+  if (entries.length < 2) { showToast(t('need_2'), 'error'); return; }
+  const empty = $('a2ui-empty'); if (empty) empty.remove();
+  const tiles = entries.slice(0, 8).map(([tool, v]) => {
+    const d = v.data || {};
+    const sym = d.symbol || d.base || tool.replace(/_/g, ' ');
+    const price = d.price ?? d.total_market_value ?? d.value ?? '';
+    return '<div class="a2ui-metric"><div class="a2ui-mlabel">' + esc(sym) + '</div>'
+      + '<div class="a2ui-mval">' + (price === '' ? esc(tool) : esc(String(price))) + '</div>'
+      + '<div class="a2ui-mlabel">' + esc(tool) + '</div></div>';
+  }).join('');
+  const card = document.createElement('div');
+  card.className = 'a2ui-card'; card.dataset.tool = 'composed_dashboard';
+  card.style.borderLeftColor = 'var(--accent-purple)';
+  card.innerHTML = '<div class="a2ui-head"><span class="proto-badge">A2UI</span>'
+    + '<span class="proto-badge mcp">COMPOSED</span><span>Dashboard · ' + entries.length + ' sources</span></div>'
+    + '<div class="a2ui-body"><div class="a2ui-grid">' + tiles + '</div>'
+    + '<div class="a2ui-mlabel">Combined from: ' + esc(entries.map(([k]) => k).join(', ')) + '</div></div>';
+  a2uiFeed.prepend(card);
+  state.a2ui.push('composed_dashboard');
+  a2uiBadge.style.display = 'inline-flex'; a2uiBadge.textContent = state.a2ui.length;
+  showToast(t('composed_ok'), 'success');
+});
+
+// ─── 7. Alerts UI ───────────────────────────────────────────────────────────
+const alertsModal = $('alerts-modal'), alertsOverlay = $('alerts-overlay');
+function openAlerts() { alertsModal.style.display = 'block'; alertsOverlay.style.display = 'block'; loadAlerts(); }
+function closeAlerts() { alertsModal.style.display = 'none'; alertsOverlay.style.display = 'none'; }
+$('btn-alerts').addEventListener('click', openAlerts);
+$('btn-close-alerts').addEventListener('click', closeAlerts);
+alertsOverlay.addEventListener('click', closeAlerts);
+async function loadAlerts() {
+  const list = $('alerts-list');
+  list.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);">…</div>';
+  try {
+    const res = await fetch('/api/alerts');
+    const data = await res.json();
+    const items = data.alerts || [];
+    updateAlertsBadge(items);
+    if (!items.length) { list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">' + t('no_alerts') + '</div>'; return; }
+    list.innerHTML = '';
+    items.forEach((a) => {
+      const row = document.createElement('div');
+      row.className = 'mcp-tool';
+      row.style.borderLeft = a.triggered ? '3px solid var(--accent-red)' : '';
+      row.innerHTML = '<div class="mcp-name"><span class="mcp-dot' + (a.triggered ? '' : ' off') + '"></span><span></span>'
+        + '<span style="margin-left:auto;font-size:10px;">' + (a.triggered ? 'TRIGGERED' : esc(a.op + ' ' + a.target)) + '</span></div>'
+        + '<div class="mcp-desc"></div>'
+        + '<button class="btn-glass btn-sm" style="margin-top:8px;">' + t('delete') + '</button>';
+      row.querySelector('.mcp-name span:nth-child(2)').textContent = a.symbol;
+      row.querySelector('.mcp-desc').textContent = (a.last_price != null ? 'last ' + a.last_price : 'not checked yet') + (a.triggered_at ? ' · ' + a.triggered_at.slice(0, 16) : '');
+      row.querySelector('button').addEventListener('click', async () => {
+        await fetch('/api/alerts/' + encodeURIComponent(a.id), { method: 'DELETE' });
+        showToast(t('alert_deleted'), 'info'); loadAlerts();
+      });
+      list.appendChild(row);
+    });
+  } catch (e) { list.innerHTML = '<div style="font-size:12px;color:var(--accent-red);">unreachable</div>'; }
+}
+function updateAlertsBadge(items) {
+  const n = items.filter((a) => a.triggered).length;
+  const b = $('alerts-badge');
+  b.style.display = n ? 'inline-block' : 'none';
+  b.textContent = n;
+}
+$('btn-add-alert').addEventListener('click', async () => {
+  const symbol = $('alert-symbol').value.trim().toUpperCase();
+  const target = Number($('alert-target').value);
+  if (!symbol || !(target > 0)) return;
+  const res = await fetch('/api/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol, op: $('alert-op').value, target }) });
+  if (res.ok) { $('alert-symbol').value = ''; $('alert-target').value = ''; showToast(t('alert_added'), 'success'); loadAlerts(); }
+});
+$('btn-check-alerts').addEventListener('click', async () => {
+  $('alerts-note').textContent = '…';
+  try {
+    const res = await fetch('/api/alerts/check', { method: 'POST' });
+    const data = await res.json();
+    $('alerts-note').textContent = new Date().toLocaleTimeString() + ' · ' + data.checked + ' checked, ' + data.triggered + ' triggered';
+  } catch (e) { $('alerts-note').textContent = 'check failed'; }
+  loadAlerts();
+});
+setInterval(async () => {
+  try {
+    const res = await fetch('/api/alerts');
+    if (res.ok) updateAlertsBadge(((await res.json()).alerts || []));
+  } catch (e) {}
+}, 60000);
 async function loadConfiguration() {
   try {
     const res = await fetch('/health');

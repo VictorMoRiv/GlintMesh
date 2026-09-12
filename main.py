@@ -390,7 +390,7 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
                 yield event("error", content="Tool call limit reached. Please try a simpler request.")
         except Exception as error:
             # Do not expose SDK exception strings: they may contain request details or credentials.
-            if getattr(error, "code", None) == 429 and not last_combo:
+            if getattr(error, "code", None) in (429, 404, 500, 502, 503, 504) and not last_combo:
                 yield event("status", content="Usage limit reached, trying another model...")
                 continue
             yield event("error", content=gemini_error_message(error))
@@ -435,6 +435,41 @@ class ToolCallRequest(BaseModel):
 
 class ShareRequest(BaseModel):
     html: str = Field(min_length=100, max_length=500000)
+
+
+ALERTS_FILE = BASE_DIR / "alerts.json"
+ALERT_CHECK_INTERVAL_S = 300
+
+
+class AlertCreate(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12)
+    op: str = Field(default="below", pattern="^(below|above)$")
+    target: float = Field(gt=0, le=10000000)
+
+    @field_validator("symbol", mode="before")
+    @classmethod
+    def upper_symbol(cls, value):
+        return value.strip().upper() if isinstance(value, str) else value
+
+
+def _load_alerts() -> list[dict]:
+    try:
+        data = json.loads(ALERTS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _save_alerts(alerts: list[dict]) -> None:
+    ALERTS_FILE.write_text(json.dumps(alerts, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _eval_alert(alert: dict, price: float) -> bool:
+    try:
+        target = float(alert.get("target", 0))
+    except (TypeError, ValueError):
+        return False
+    return price <= target if alert.get("op") == "below" else price >= target
 
 
 @app.post("/api/tool-call")
@@ -527,8 +562,107 @@ async def list_tools():
 async def health():
     return {"status": "ok", "service": "GlintMesh", "version": "2.0.0",
             "gemini_configured": bool(GEMINI_API_KEYS), "model": GEMINI_MODEL, "models": GEMINI_MODELS,
-            "mcp_enabled": MCP_ENABLED,
+            "mcp_enabled": MCP_ENABLED, "alerts": len(_load_alerts()),
             "mcp_server": "finflow-financial-tools", "protocol": "A2UI over MCP"}
+
+
+@app.get("/api/alerts")
+async def list_alerts():
+    """Saved price alerts (local JSON, no Gemini quota used)."""
+    return {"alerts": _load_alerts()}
+
+
+@app.post("/api/alerts")
+async def create_alert(body: AlertCreate):
+    alerts = _load_alerts()
+    alert = {"id": uuid.uuid4().hex[:8], "symbol": body.symbol, "op": body.op,
+             "target": body.target, "triggered": False, "last_price": None,
+             "triggered_at": None}
+    alerts.append(alert)
+    _save_alerts(alerts)
+    return alert
+
+
+@app.delete("/api/alerts/{alert_id}")
+async def delete_alert(alert_id: str):
+    if not re.fullmatch(r"[a-f0-9]{8}", alert_id or ""):
+        raise HTTPException(status_code=404, detail="Alert not found.")
+    alerts = _load_alerts()
+    kept = [a for a in alerts if a.get("id") != alert_id]
+    if len(kept) == len(alerts):
+        raise HTTPException(status_code=404, detail="Alert not found.")
+    _save_alerts(kept)
+    return {"deleted": alert_id}
+
+
+@app.post("/api/alerts/check")
+async def check_alerts():
+    """Evaluate all saved alerts against live quotes (free: no Gemini call)."""
+    if not MCP_ENABLED:
+        raise HTTPException(status_code=503, detail="MCP tools are unavailable.")
+    try:
+        tools = await mcp_client.list_tools()
+    except Exception:
+        raise HTTPException(status_code=503, detail="MCP tools are unavailable.")
+    if "get_live_quote" not in {t.name for t in tools}:
+        raise HTTPException(status_code=503, detail="Live quotes unavailable.")
+    alerts = _load_alerts()
+    checked, triggered = 0, 0
+    for alert in alerts:
+        try:
+            data = await mcp_client.call_tool("get_live_quote", {"symbol": alert.get("symbol", "")})
+            price = float(data.get("price"))
+        except Exception:
+            continue
+        checked += 1
+        alert["last_price"] = round(price, 2)
+        if _eval_alert(alert, price):
+            if not alert.get("triggered"):
+                from datetime import datetime, timezone
+                alert["triggered_at"] = datetime.now(timezone.utc).isoformat()
+            alert["triggered"] = True
+            triggered += 1
+        else:
+            alert["triggered"] = False
+    _save_alerts(alerts)
+    return {"checked": checked, "triggered": triggered, "alerts": alerts}
+
+
+async def _alerts_loop():
+    await asyncio.sleep(ALERT_CHECK_INTERVAL_S)
+    while True:
+        try:
+            alerts = _load_alerts()
+            if alerts and MCP_ENABLED:
+                try:
+                    tools = await mcp_client.list_tools()
+                    names = {t.name for t in tools}
+                except Exception:
+                    names = set()
+                if "get_live_quote" in names:
+                    for alert in alerts:
+                        try:
+                            data = await mcp_client.call_tool("get_live_quote", {"symbol": alert.get("symbol", "")})
+                            price = float(data.get("price"))
+                        except Exception:
+                            continue
+                        alert["last_price"] = round(price, 2)
+                        if _eval_alert(alert, price):
+                            if not alert.get("triggered"):
+                                from datetime import datetime, timezone
+                                alert["triggered_at"] = datetime.now(timezone.utc).isoformat()
+                            alert["triggered"] = True
+                        else:
+                            alert["triggered"] = False
+                    _save_alerts(alerts)
+        except Exception:
+            pass
+        await asyncio.sleep(ALERT_CHECK_INTERVAL_S)
+
+
+@app.on_event("startup")
+async def start_alerts_loop():
+    asyncio.create_task(_alerts_loop())
 
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")

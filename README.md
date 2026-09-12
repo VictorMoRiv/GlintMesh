@@ -1,6 +1,8 @@
-# GlintMesh
+# GlintMesh — A2UI over MCP Interface Mesh
 
-Generador de interfaces financieras con una UI web, FastAPI y Gemini. El usuario escribe en la interfaz y recibe la respuesta progresivamente. Las solicitudes de dashboards generan HTML que se muestra en Preview, Code y Export; los saludos reciben una respuesta de texto.
+Generador de interfaces financieras con UI web, FastAPI y Gemini. Describes un dashboard en lenguaje natural, GlintMesh trae datos MCP (live Yahoo + ECB + demo) y los renderiza como superficies A2UI en segundos, sin costo por refresh.
+
+**Pitch (30s):** los dashboards financieros tardan días y mezclan datos falsos con reales. GlintMesh genera la interfaz con Gemini, etiqueta cada dato (LIVE / SIM / USER), refresca sin gastar cuota y te avisa cuando un precio cruza tu umbral. Todo corre local con FastAPI + MCP estándar.
 
 ## Ejecutar en Windows (PowerShell)
 
@@ -62,8 +64,15 @@ Con MCP activado, el backend obtiene los esquemas, entrega las herramientas a Ge
 - `POST /api/generate`: JSON `{"message":"...", "lang":"es"|"en", "context":"resumen opcional", "dataset_id":"opcional"}`; `message` 1-500 chars, `context` hasta 2000. Respuesta SSE con eventos `status`, `text_chunk`, `tool_call`, `tool_result`, `error` y `done`. La UI guarda la última sesión en localStorage y reenvía su resumen como `context` para continuidad.
 - `GET /api/tools`: herramientas disponibles; lista vacía cuando MCP está desactivado.
 - `GET /health`: modelo y presencia de configuración, sin exponer la clave. No realiza una llamada de validación a Gemini.
+- `GET /api/alerts` + `POST /api/alerts` + `DELETE /api/alerts/{id}` + `POST /api/alerts/check`: alertas de precio guardadas en `alerts.json` (ej. AAPL below 150). El servidor las revisa cada 5 min contra `get_live_quote`; sin gastar cuota de Gemini.
 
-Los errores de validación usan HTTP 422; una clave sin configurar usa HTTP 503. Los errores ocurridos durante la generación usan el evento SSE `error` y no emiten `done`.
+Los errores de validación usan HTTP 422; una clave sin configurar usa HTTP 503. Los errores ocurridos durante la generación usan el evento SSE `error` y no emiten `done`. La UI muestra el error con botón **Retry** en 1 clic, y el backend rota keys/modelos ante 429/404/5xx antes de fallar.
+
+## Demo 3 minutos (ver DEMO-3MIN.md)
+
+1. `Hola` → respuesta de texto (0:30).
+2. `Dashboard de portafolio AAPL, MSFT, NVDA` → Preview + A2UI + **Compose dashboard** combina N superficies en 1 (1:30).
+3. **Refresh data** sin cuota + crear alerta `AAPL below 150` + **Check now** (1:00).
 
 ## Pruebas
 

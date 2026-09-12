@@ -359,5 +359,48 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(self.client.delete("/api/datasets/../main").status_code, 404)
 
 
+class AlertTests(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(main.app)
+        main._save_alerts([])
+
+    def tearDown(self):
+        main._save_alerts([])
+
+    def test_crud_and_validation(self):
+        self.assertEqual(self.client.get("/api/alerts").json(), {"alerts": []})
+        bad = self.client.post("/api/alerts", json={"symbol": "AAPL", "op": "sideways", "target": 10})
+        self.assertEqual(bad.status_code, 422)
+        created = self.client.post("/api/alerts", json={"symbol": "aapl", "op": "below", "target": 150}).json()
+        self.assertEqual(created["symbol"], "AAPL")
+        self.assertFalse(created["triggered"])
+        self.assertEqual(len(self.client.get("/api/alerts").json()["alerts"]), 1)
+        self.assertEqual(self.client.delete(f"/api/alerts/{created['id']}").status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/alerts/{created['id']}").status_code, 404)
+        self.assertEqual(self.client.delete("/api/alerts/nope").status_code, 404)
+
+    def test_check_triggers_without_gemini(self):
+        self.client.post("/api/alerts", json={"symbol": "AAPL", "op": "below", "target": 200})
+        tool = SimpleNamespace(name="get_live_quote", description="Live", input_schema={})
+        with patch.object(main, "MCP_ENABLED", True), patch.object(
+                main.mcp_client, "list_tools", new_callable=AsyncMock, return_value=[tool]), patch.object(
+                main.mcp_client, "call_tool", new_callable=AsyncMock, return_value={"price": 150.0}):
+            body = self.client.post("/api/alerts/check").json()
+        self.assertEqual(body["checked"], 1)
+        self.assertEqual(body["triggered"], 1)
+        self.assertTrue(body["alerts"][0]["triggered"])
+        self.assertEqual(body["alerts"][0]["last_price"], 150.0)
+
+    def test_check_requires_mcp(self):
+        with patch.object(main, "MCP_ENABLED", False):
+            self.assertEqual(self.client.post("/api/alerts/check").status_code, 503)
+
+    def test_eval_both_ops(self):
+        self.assertTrue(main._eval_alert({"op": "below", "target": 150}, 100))
+        self.assertFalse(main._eval_alert({"op": "below", "target": 150}, 200))
+        self.assertTrue(main._eval_alert({"op": "above", "target": 150}, 200))
+        self.assertFalse(main._eval_alert({"op": "above", "target": 150}, 100))
+
+
 if __name__ == "__main__":
     unittest.main()
