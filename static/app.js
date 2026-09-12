@@ -77,8 +77,8 @@ const I18N = {
 };
 let lang = localStorage.getItem('glintmesh-lang') || 'es';
 if (!I18N[lang]) lang = 'es';
-Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', signin: 'Entrar', signup: 'Registro', signin_title: 'Iniciar sesión', session_saved: 'Sesión guardada mientras hay login', guest_note: 'Modo invitado: tu info se pierde al salir del chat. Inicia sesión para guardarla.', voice_on: 'Escuchando... habla ahora', voice_off: 'Voz no disponible en este navegador', voice_mic_denied: 'Permite el micrófono en el navegador y reintenta', voice_no_mic: 'No se encontró micrófono', voice_no_speech: 'No te escuché, habla más fuerte y reintenta', voice_network: 'Voz necesita internet (Chrome/Edge)', voice_lang: 'Idioma de voz no soportado', img_many: 'Máximo 3 imágenes', img_big: 'Imagen muy pesada (máx 1.5 MB)' });
-Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', signin: 'Sign in', signup: 'Register', signin_title: 'Sign in', session_saved: 'Session saved while signed in', guest_note: 'Guest mode: your info is lost when you leave the chat. Sign in to keep it.', voice_on: 'Listening... speak now', voice_off: 'Voice not available in this browser', voice_mic_denied: 'Allow the microphone in the browser and retry', voice_no_mic: 'No microphone found', voice_no_speech: 'Did not hear you, speak up and retry', voice_network: 'Voice needs internet (Chrome/Edge)', voice_lang: 'Voice language not supported', img_many: 'Max 3 images', img_big: 'Image too large (max 1.5 MB)' });
+Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', signin: 'Entrar', signup: 'Registro', signin_title: 'Iniciar sesión', session_saved: 'Sesión guardada mientras hay login', guest_note: 'Modo invitado: tu info se pierde al salir del chat. Inicia sesión para guardarla.', auth_short: 'Usuario 3+ letras y clave 4+ caracteres', auth_reg_fail: 'No se pudo registrar (¿usuario tomado?)', auth_enter_login: 'Registrado. Ahora pulsa Entrar', auth_empty: 'Escribe usuario y clave', auth_bad: 'Usuario o clave incorrectos', auth_login_fail: 'No se pudo entrar', auth_photo_ok: 'Foto actualizada', auth_photo_fail: 'No se pudo subir la foto (máx 300 KB)', auth_avatar_big: 'Foto muy pesada (máx 300 KB)', voice_on: 'Escuchando... habla ahora', voice_off: 'Voz no disponible en este navegador', voice_mic_denied: 'Permite el micrófono en el navegador y reintenta', voice_no_mic: 'No se encontró micrófono', voice_no_speech: 'No te escuché, habla más fuerte y reintenta', voice_network: 'Voz necesita internet (Chrome/Edge)', voice_lang: 'Idioma de voz no soportado', img_many: 'Máximo 3 imágenes', img_big: 'Imagen muy pesada (máx 1.5 MB)' });
+Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', signin: 'Sign in', signup: 'Register', signin_title: 'Sign in', session_saved: 'Session saved while signed in', guest_note: 'Guest mode: your info is lost when you leave the chat. Sign in to keep it.', auth_short: 'User 3+ chars and password 4+ chars', auth_reg_fail: 'Could not register (name taken?)', auth_enter_login: 'Registered. Now press Sign in', auth_empty: 'Type user and password', auth_bad: 'Wrong user or password', auth_login_fail: 'Could not sign in', auth_photo_ok: 'Photo updated', auth_photo_fail: 'Could not upload photo (max 300 KB)', auth_avatar_big: 'Photo too large (max 300 KB)', voice_on: 'Listening... speak now', voice_off: 'Voice not available in this browser', voice_mic_denied: 'Allow the microphone in the browser and retry', voice_no_mic: 'No microphone found', voice_no_speech: 'Did not hear you, speak up and retry', voice_network: 'Voice needs internet (Chrome/Edge)', voice_lang: 'Voice language not supported', img_many: 'Max 3 images', img_big: 'Image too large (max 1.5 MB)' });
 const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k;
 
 function applyLang(next) {
@@ -1128,19 +1128,37 @@ $('btn-close-auth').addEventListener('click', () => { $('auth-modal').style.disp
 $('auth-overlay').addEventListener('click', () => { $('auth-modal').style.display = 'none'; $('auth-overlay').style.display = 'none'; });
 $('btn-register').addEventListener('click', async () => {
   const user = $('auth-user').value.trim(), password = $('auth-pass').value;
+  if (user.length < 3 || password.length < 4) { $('auth-note').textContent = t('auth_short'); return; }
   const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
-  $('auth-note').textContent = res.ok ? 'registered — now sign in' : 'register failed (' + res.status + ')';
+  if (!res.ok) { $('auth-note').textContent = t('auth_reg_fail') + ' (' + res.status + ')'; return; }
+  // auto-login: registra y entra directo, sin paso extra
+  const login = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
+  if (!login.ok) { $('auth-note').textContent = t('auth_enter_login'); return; }
+  await applyAuthSession(await login.json());
 });
-$('btn-login').addEventListener('click', async () => {
-  const user = $('auth-user').value.trim(), password = $('auth-pass').value;
-  const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
-  if (!res.ok) { $('auth-note').textContent = 'login failed (' + res.status + ')'; return; }
-  const data = await res.json();
+async function applyAuthSession(data) {
   try { localStorage.setItem(AUTH_KEY, JSON.stringify(data)); } catch (e) {}
+  // la sesion de invitado pasa a ser persistente al entrar
+  try {
+    const guest = sessionStorage.getItem(SESSION_KEY);
+    if (guest && !localStorage.getItem(SESSION_KEY)) localStorage.setItem(SESSION_KEY, guest);
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch (e) {}
   refreshAuthLabel();
   $('auth-modal').style.display = 'none'; $('auth-overlay').style.display = 'none';
-  showToast(data.user, 'success');
+  showToast((data && data.user) || '', 'success');
+}
+$('btn-login').addEventListener('click', async () => {
+  const user = $('auth-user').value.trim(), password = $('auth-pass').value;
+  if (!user || !password) { $('auth-note').textContent = t('auth_empty'); return; }
+  const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
+  if (!res.ok) { $('auth-note').textContent = (res.status === 401 ? t('auth_bad') : t('auth_login_fail')) + ' (' + res.status + ')'; return; }
+  await applyAuthSession(await res.json());
 });
+// Enter en usuario/clave = entrar
+[$('auth-user'), $('auth-pass')].forEach((el) => el.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); $('btn-login').click(); }
+}));
 $('btn-logout').addEventListener('click', async () => {
   try {
     const s = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
@@ -1159,11 +1177,18 @@ $('auth-avatar-input').addEventListener('change', (e) => {
   const f = (e.target.files || [])[0];
   e.target.value = '';
   if (!f) return;
-  if (f.size > 300000) { $('auth-note').textContent = 'photo too large (max 300 KB)'; return; }
+  if (f.size > 300000) { $('auth-note').textContent = t('auth_avatar_big'); return; }
   const rd = new FileReader();
   rd.onload = async () => {
     const url = String(rd.result || '');
     if (!/^data:image\/(png|jpeg|webp|gif);base64,/.test(url)) return;
+    // preview local inmediato (aunque el upload tarde)
+    $('auth-profile-img').style.display = 'block';
+    $('auth-profile-icon').style.display = 'none';
+    $('auth-profile-img').src = url;
+    $('auth-avatar').style.display = 'inline-block';
+    $('auth-icon').style.display = 'none';
+    $('auth-avatar-img').src = url;
     try {
       const res = await fetch('/api/auth/avatar', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ avatar: url.slice(0, 400000) }) });
       if (!res.ok) throw new Error('upload failed');
@@ -1171,8 +1196,8 @@ $('auth-avatar-input').addEventListener('change', (e) => {
       const s = currentAuth(); s.avatar = data.avatar;
       try { localStorage.setItem(AUTH_KEY, JSON.stringify(s)); } catch (err) {}
       refreshAuthLabel();
-      showToast(data.user, 'success');
-    } catch (err) { $('auth-note').textContent = 'photo upload failed'; }
+      $('auth-note').textContent = t('auth_photo_ok');
+    } catch (err) { $('auth-note').textContent = t('auth_photo_fail'); }
   };
   rd.readAsDataURL(f);
 });
