@@ -61,7 +61,7 @@ function applyLang(next) {
 }
 
 // ─── State ──────────────────────────────────────────────────────────────────
-const state = { isGenerating: false, controller: null, generatedHTML: '', agentMessage: '', toolCalls: [], a2ui: [] };
+const state = { isGenerating: false, controller: null, generatedHTML: '', agentMessage: '', toolCalls: [], a2ui: [], charts: [] };
 
 const $ = (id) => document.getElementById(id);
 const chatTextarea = $('chat-textarea'), sendBtn = $('send-btn'), toolFeed = $('tool-feed'),
@@ -106,6 +106,7 @@ document.querySelectorAll('.suggestion-chip').forEach((chip) => {
 
 $('btn-clear').addEventListener('click', () => {
   state.controller?.abort(); state.controller = null; state.isGenerating = false; state.a2ui = [];
+  destroyA2UICharts();
   sendBtn.disabled = false; progressBar.style.display = 'none'; previewIframe.srcdoc = '';
   state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = [];
   welcomeState.style.display = 'flex'; generatedWrapper.classList.remove('visible');
@@ -182,6 +183,7 @@ async function handleSubmit() {
   const controller = new AbortController();
   state.controller = controller; state.isGenerating = true;
   state.generatedHTML = ''; state.agentMessage = ''; state.toolCalls = []; state.a2ui = [];
+  destroyA2UICharts();
   chatTextarea.value = ''; chatTextarea.style.height = 'auto'; charCount.textContent = '0 / 500';
   sendBtn.disabled = true; progressBar.style.display = 'flex';
   welcomeState.style.display = 'none'; generatedWrapper.classList.add('visible');
@@ -223,11 +225,145 @@ async function handleSubmit() {
   }
 }
 
+/* ─── Real A2UI: native components rendered from MCP data (no model code runs) ─── */
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtMoney(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : esc(v);
+}
+function fmtNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString('en-US') : esc(v);
+}
+function deltaBadge(pct) {
+  const n = Number(pct);
+  const up = !(n < 0);
+  return '<span class="a2ui-delta ' + (up ? 'up' : 'down') + '">' + (up ? '▲' : '▼') + ' ' + esc(Math.abs(Number.isFinite(n) ? n : 0).toFixed(2)) + '%</span>';
+}
+function destroyA2UICharts() {
+  (state.charts || []).forEach((c) => { try { c.destroy(); } catch (e) {} });
+  state.charts = [];
+}
+
 function a2uiKind(tool) {
-  if (/historical|chart|prices/i.test(tool)) return 'chart';
+  if (/historical|prices/i.test(tool)) return 'chart';
+  if (/compound/i.test(tool)) return 'chart';
   if (/portfolio|forex|indices|news/i.test(tool)) return 'table';
-  if (/credit|compound/i.test(tool)) return 'form';
+  if (/credit/i.test(tool)) return 'gauge';
   return 'card';
+}
+
+function a2uiQuote(d) {
+  return '<div class="a2ui-hero"><div><div class="a2ui-sym">' + esc(d.symbol) + '</div>'
+    + '<div class="a2ui-price">' + fmtMoney(d.price) + ' ' + deltaBadge(d.change_percent) + '</div></div></div>'
+    + '<div class="a2ui-grid">'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Change</div><div class="a2ui-mval">' + fmtMoney(d.change) + '</div></div>'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Volume</div><div class="a2ui-mval">' + fmtNum(d.volume) + '</div></div>'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Mkt Cap</div><div class="a2ui-mval">' + esc(d.market_cap) + '</div></div>'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">52w Range</div><div class="a2ui-mval">' + fmtMoney(d.low_52w) + ' – ' + fmtMoney(d.high_52w) + '</div></div>'
+    + '</div>';
+}
+
+function a2uiPortfolio(d) {
+  const rows = (d.positions || []).map((p) => '<tr><td><strong>' + esc(p.symbol) + '</strong></td><td>' + fmtNum(p.shares) + '</td>'
+    + '<td>' + fmtMoney(p.current_price) + '</td><td>' + fmtMoney(p.market_value) + '</td><td>' + deltaBadge(p.gain_percent) + '</td></tr>').join('');
+  return '<div class="a2ui-grid">'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Total Value</div><div class="a2ui-mval">' + fmtMoney(d.total_market_value) + '</div></div>'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Unrealized Gain</div><div class="a2ui-mval">' + fmtMoney(d.total_unrealized_gain) + '</div></div>'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Return</div><div class="a2ui-mval">' + deltaBadge(d.total_return_percent) + '</div></div>'
+    + '</div><table class="a2ui-table"><thead><tr><th>Symbol</th><th>Shares</th><th>Price</th><th>Value</th><th>Gain</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function a2uiIndices(d) {
+  const tiles = Object.entries(d || {}).map(([k, v]) => '<div class="a2ui-metric"><div class="a2ui-mlabel">' + esc(v.name || k) + '</div>'
+    + '<div class="a2ui-mval">' + fmtNum(v.value) + '</div>' + deltaBadge(v.change_percent) + '</div>').join('');
+  return '<div class="a2ui-grid">' + tiles + '</div>';
+}
+
+function a2uiHistory(d, cid) {
+  return '<div class="a2ui-head-row"><strong>' + esc(d.symbol) + '</strong><span class="a2ui-mlabel">' + esc(d.period_days) + 'd</span>'
+    + deltaBadge(d.total_return) + '</div><div class="a2ui-canvas-wrap"><canvas id="' + cid + '"></canvas></div>';
+}
+
+function a2uiNews(d) {
+  const items = Array.isArray(d) ? d : (d.items || d.articles || []);
+  const rows = items.map((n) => {
+    const s = String(n.sentiment || 'neutral').toLowerCase();
+    const cls = s.includes('pos') ? 'pos' : (s.includes('neg') ? 'neg' : 'neu');
+    return '<div class="a2ui-news"><div><div class="a2ui-news-title">' + esc(n.title) + '</div>'
+      + '<div class="a2ui-mlabel">' + esc(n.source) + ' · ' + esc(n.published_at || '') + '</div></div>'
+      + '<span class="a2ui-sent ' + cls + '">' + esc(n.sentiment || 'neutral') + '</span></div>';
+  }).join('');
+  return rows || '<div class="a2ui-mlabel">No headlines</div>';
+}
+
+function a2uiCredit(d) {
+  const score = Math.max(0, Math.min(100, Number(d.risk_score) || 0));
+  const rec = String(d.recommendation || '');
+  const rc = rec.includes('APPROVE') && !rec.includes('CONDITIONAL') ? 'pos' : (rec.includes('DECLINE') ? 'neg' : 'neu');
+  const factors = (d.risk_factors || []).map((f) => '<li><strong>' + esc(f.factor) + '</strong> <span class="a2ui-mlabel">[' + esc(f.impact) + ']</span> — ' + esc(f.note) + '</li>').join('');
+  return '<div class="a2ui-grid">'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Risk Score</div><div class="a2ui-mval">' + esc(score) + '/100</div></div>'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Decision</div><div><span class="a2ui-sent ' + rc + '">' + esc(rec.replace(/_/g, ' ')) + '</span></div></div>'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Sugg. Rate</div><div class="a2ui-mval">' + esc(d.suggested_interest_rate) + '%</div></div>'
+    + '</div><div class="a2ui-riskbar"><div style="width:' + score + '%"></div></div>'
+    + (factors ? '<ul class="a2ui-factors">' + factors + '</ul>' : '<div class="a2ui-mlabel">No risk factors flagged</div>');
+}
+
+function a2uiCompound(d, cid) {
+  const yrs = d.yearly_breakdown || [];
+  const last = yrs.length ? yrs[yrs.length - 1] : null;
+  return '<div class="a2ui-grid">'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Final Balance</div><div class="a2ui-mval">' + fmtMoney(d.final_balance) + '</div></div>'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Contributed</div><div class="a2ui-mval">' + fmtMoney(d.total_contributions) + '</div></div>'
+    + '<div class="a2ui-metric"><div class="a2ui-mlabel">Interest</div><div class="a2ui-mval">' + fmtMoney(d.total_interest_earned) + '</div></div>'
+    + '</div><div class="a2ui-canvas-wrap"><canvas id="' + cid + '"></canvas></div>'
+    + (last ? '<div class="a2ui-mlabel">ROI ' + esc(d.return_on_investment) + '% over ' + yrs.length + ' years</div>' : '');
+}
+
+function a2uiForex(d) {
+  const rows = Object.entries(d.rates || {}).map(([c, r]) => '<tr><td><strong>' + esc(c) + '</strong></td><td>' + esc(r) + '</td></tr>').join('');
+  return '<div class="a2ui-head-row"><span class="a2ui-mlabel">Base</span><strong>' + esc(d.base) + '</strong></div>'
+    + '<table class="a2ui-table"><thead><tr><th>Currency</th><th>Rate</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function renderA2UIBody(tool, data, cid) {
+  try {
+    if (!data || typeof data !== 'object') return '<pre class="a2ui-raw">' + esc(JSON.stringify(data)) + '</pre>';
+    if (tool === 'get_stock_quote') return a2uiQuote(data);
+    if (tool === 'get_portfolio_summary') return a2uiPortfolio(data);
+    if (tool === 'get_market_indices') return a2uiIndices(data);
+    if (tool === 'get_historical_prices') return a2uiHistory(data, cid);
+    if (tool === 'get_financial_news') return a2uiNews(data);
+    if (tool === 'analyze_credit_risk') return a2uiCredit(data);
+    if (tool === 'calculate_compound_interest') return a2uiCompound(data, cid);
+    if (tool === 'get_forex_rates') return a2uiForex(data);
+    return '<pre class="a2ui-raw">' + esc(JSON.stringify(data, null, 2)).slice(0, 4000) + '</pre>';
+  } catch (e) {
+    return '<div class="a2ui-mlabel">Could not render this surface</div>';
+  }
+}
+
+function mountA2UIChart(tool, data, cid) {
+  if (!window.Chart) return;
+  try {
+    Chart.defaults.color = '#8a94a8';
+    Chart.defaults.font.family = 'Inter, sans-serif';
+    const el = document.getElementById(cid);
+    if (!el) return;
+    let cfg = null;
+    if (tool === 'get_historical_prices') {
+      const pts = data.data || [];
+      const step = Math.max(1, Math.ceil(pts.length / 14));
+      cfg = { type: 'line', data: { labels: pts.filter((_, i) => i % step === 0).map((p) => p.date), datasets: [{ data: pts.filter((_, i) => i % step === 0).map((p) => p.close), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } };
+    } else if (tool === 'calculate_compound_interest') {
+      const yrs = data.yearly_breakdown || [];
+      cfg = { type: 'line', data: { labels: yrs.map((y) => 'Y' + y.year), datasets: [{ label: 'Balance', data: yrs.map((y) => y.balance), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.15)', fill: true, tension: .3 }, { label: 'Contributions', data: yrs.map((y) => y.contributions), borderColor: '#64748b', borderDash: [5, 4], fill: false, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { labels: { boxWidth: 12 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' } } } } };
+    }
+    if (cfg) state.charts.push(new Chart(el, cfg));
+  } catch (e) {}
 }
 
 function handleSSEEvent(event) {
@@ -274,20 +410,34 @@ function addA2UICard(tool, data, pending) {
   const empty = $('a2ui-empty'); if (empty) empty.remove();
   const card = document.createElement('div'); card.className = 'a2ui-card'; card.dataset.tool = tool;
   const kind = a2uiKind(tool);
-  card.innerHTML = '<div class="a2ui-head"><span class="proto-badge">A2UI</span><span class="proto-badge mcp">MCP</span><span></span><span style="margin-left:auto;font-size:10px;color:var(--text-muted);"></span></div><pre></pre>';
+  const cid = 'a2ui-chart-' + Date.now() + '-' + state.a2ui.length;
+  card.dataset.cid = cid;
+  card.innerHTML = '<div class="a2ui-head"><span class="proto-badge">A2UI</span><span class="proto-badge mcp">MCP</span><span></span><span style="margin-left:auto;font-size:10px;color:var(--text-muted);"></span></div><div class="a2ui-body"><div class="skeleton" style="height:64px;"></div></div>';
   card.querySelector('.a2ui-head span:nth-child(3)').textContent = tool;
   card.querySelector('.a2ui-head span:last-child').textContent = kind;
-  card.querySelector('pre').textContent = pending ? '…' : JSON.stringify(data, null, 2);
+  if (!pending) fillA2UICard(card, tool, data, false);
+  else card.dataset.pending = '1';
   a2uiFeed.appendChild(card);
   state.a2ui.push(tool);
   a2uiBadge.style.display = 'inline-flex'; a2uiBadge.textContent = state.a2ui.length;
 }
+function fillA2UICard(card, tool, data, failed) {
+  const body = card.querySelector('.a2ui-body');
+  if (failed) {
+    body.innerHTML = '<div class="a2ui-mlabel">MCP tool failed</div>';
+    card.style.borderLeftColor = 'var(--accent-red)';
+    return;
+  }
+  body.innerHTML = renderA2UIBody(tool, data, card.dataset.cid);
+  card.style.borderLeftColor = 'var(--accent-green)';
+  mountA2UIChart(tool, data, card.dataset.cid);
+}
 function updateA2UICard(tool, data, failed) {
   const cards = a2uiFeed.querySelectorAll('.a2ui-card');
   for (let i = cards.length - 1; i >= 0; i--) {
-    if (cards[i].dataset.tool === tool && cards[i].querySelector('pre').textContent === '…') {
-      cards[i].querySelector('pre').textContent = failed ? 'MCP tool failed' : JSON.stringify(data, null, 2).slice(0, 4000);
-      cards[i].style.borderLeftColor = failed ? 'var(--accent-red)' : 'var(--accent-green)';
+    if (cards[i].dataset.tool === tool && cards[i].dataset.pending === '1') {
+      delete cards[i].dataset.pending;
+      fillA2UICard(cards[i], tool, data, failed);
       return;
     }
   }
