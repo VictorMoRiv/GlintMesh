@@ -1,0 +1,23 @@
+{
+  "name": "gemini-sandbox",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "chat": "node chat.js",
+    "step1": "node step1-basic.js",
+    "step2": "node step2-function-calling.js",
+    "step3": "node step3-structured-output.js",
+    "step4": "node step4-chat-context.js",
+    "step5": "node step5-streaming.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^17.4.2"
+  }
+}

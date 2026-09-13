@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.venv/
+.tools/
+__pycache__/
+*.py[cod]
+node_modules/
+.test-artifacts/
+uploads/
+shares/

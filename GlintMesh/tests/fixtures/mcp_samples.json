@@ -1,0 +1,815 @@
+{
+  "meta": {
+    "note": "Golden MCP payloads: live from Yahoo Finance, demo simulated"
+  },
+  "get_live_quote": {
+    "symbol": "AAPL",
+    "price": 332.27,
+    "change": 16.93,
+    "change_percent": 5.37,
+    "volume": 50423955,
+    "market_cap": null,
+    "high_52w": 344.57,
+    "low_52w": 235.03,
+    "timestamp": "2026-09-12T12:04:39.885861+00:00",
+    "source": "live"
+  },
+  "get_live_history": {
+    "symbol": "AAPL",
+    "period_days": 22,
+    "data": [
+      {
+        "date": "2026-08-12",
+        "open": 305.1,
+        "high": 305.66,
+        "low": 300.57,
+        "close": 302.25,
+        "volume": 41657800
+      },
+      {
+        "date": "2026-08-13",
+        "open": 304.21,
+        "high": 306.0,
+        "low": 302.05,
+        "close": 305.26,
+        "volume": 40349300
+      },
+      {
+        "date": "2026-08-14",
+        "open": 306.0,
+        "high": 307.49,
+        "low": 304.3,
+        "close": 305.93,
+        "volume": 28229400
+      },
+      {
+        "date": "2026-08-17",
+        "open": 306.21,
+        "high": 307.66,
+        "low": 302.94,
+        "close": 305.59,
+        "volume": 38169300
+      },
+      {
+        "date": "2026-08-18",
+        "open": 307.58,
+        "high": 311.49,
+        "low": 305.74,
+        "close": 310.03,
+        "volume": 53424500
+      },
+      {
+        "date": "2026-08-19",
+        "open": 310.14,
+        "high": 319.28,
+        "low": 309.6,
+        "close": 316.83,
+        "volume": 50505600
+      },
+      {
+        "date": "2026-08-20",
+        "open": 317.46,
+        "high": 320.28,
+        "low": 310.65,
+        "close": 311.3,
+        "volume": 40959200
+      },
+      {
+        "date": "2026-08-21",
+        "open": 312.05,
+        "high": 312.38,
+        "low": 307.01,
+        "close": 309.35,
+        "volume": 46876800
+      },
+      {
+        "date": "2026-08-24",
+        "open": 311.47,
+        "high": 313.36,
+        "low": 309.97,
+        "close": 310.34,
+        "volume": 34673600
+      },
+      {
+        "date": "2026-08-25",
+        "open": 310.79,
+        "high": 313.59,
+        "low": 308.21,
+        "close": 309.9,
+        "volume": 25869800
+      },
+      {
+        "date": "2026-08-26",
+        "open": 310.3,
+        "high": 315.43,
+        "low": 308.8,
+        "close": 313.45,
+        "volume": 34024500
+      },
+      {
+        "date": "2026-08-27",
+        "open": 310.55,
+        "high": 315.4,
+        "low": 309.4,
+        "close": 314.58,
+        "volume": 32419200
+      },
+      {
+        "date": "2026-08-28",
+        "open": 316.85,
+        "high": 322.37,
+        "low": 315.45,
+        "close": 319.7,
+        "volume": 38649400
+      },
+      {
+        "date": "2026-08-31",
+        "open": 319.6,
+        "high": 321.24,
+        "low": 312.8,
+        "close": 316.85,
+        "volume": 41242700
+      },
+      {
+        "date": "2026-09-01",
+        "open": 316.98,
+        "high": 327.3,
+        "low": 314.73,
+        "close": 325.13,
+        "volume": 53167400
+      },
+      {
+        "date": "2026-09-02",
+        "open": 326.87,
+        "high": 328.4,
+        "low": 323.53,
+        "close": 324.96,
+        "volume": 33776400
+      },
+      {
+        "date": "2026-09-03",
+        "open": 324.87,
+        "high": 330.81,
+        "low": 324.11,
+        "close": 328.21,
+        "volume": 37225800
+      },
+      {
+        "date": "2026-09-04",
+        "open": 328.31,
+        "high": 328.93,
+        "low": 317.86,
+        "close": 319.97,
+        "volume": 39606900
+      },
+      {
+        "date": "2026-09-08",
+        "open": 317.1,
+        "high": 320.7,
+        "low": 314.9,
+        "close": 316.22,
+        "volume": 35477100
+      },
+      {
+        "date": "2026-09-09",
+        "open": 315.49,
+        "high": 319.15,
+        "low": 309.9,
+        "close": 315.34,
+        "volume": 65640000
+      },
+      {
+        "date": "2026-09-10",
+        "open": 316.67,
+        "high": 326.74,
+        "low": 316.51,
+        "close": 326.57,
+        "volume": 70011900
+      },
+      {
+        "date": "2026-09-11",
+        "open": 327.45,
+        "high": 336.22,
+        "low": 326.3,
+        "close": 332.27,
+        "volume": 50659000
+      }
+    ],
+    "start_price": 302.25,
+    "end_price": 332.27,
+    "total_return": 9.93,
+    "source": "live"
+  },
+  "get_live_indices": {
+    "SP500": {
+      "name": "S&P 500",
+      "value": 7656.98,
+      "change": 20.62,
+      "change_percent": 0.27
+    },
+    "NASDAQ": {
+      "name": "NASDAQ",
+      "value": 26333.03,
+      "change": 79.69,
+      "change_percent": 0.3
+    },
+    "DOW": {
+      "name": "Dow Jones",
+      "value": 52573.29,
+      "change": 192.63,
+      "change_percent": 0.37
+    },
+    "IPC": {
+      "name": "IPC Mexico",
+      "value": 63924.77,
+      "change": -182.05,
+      "change_percent": -0.28
+    },
+    "FTSE": {
+      "name": "FTSE 100",
+      "value": 10650.44,
+      "change": -19.66,
+      "change_percent": -0.18
+    },
+    "source": "live"
+  },
+  "get_live_fx": {
+    "base": "USD",
+    "timestamp": "2026-09-12T12:04:44.154009+00:00",
+    "rates": {
+      "EUR": 0.8619,
+      "GBP": 0.7392,
+      "JPY": 153.554,
+      "MXN": 16.964,
+      "CAD": 1.3869,
+      "AUD": 1.3942,
+      "CHF": 0.8161,
+      "CNY": 6.7075,
+      "BRL": 5.1262
+    },
+    "source": "live"
+  },
+  "get_stock_quote": {
+    "symbol": "AAPL",
+    "price": 197.44,
+    "change": 7.93,
+    "change_percent": 4.18,
+    "volume": 42108648,
+    "market_cap": "1864.8B",
+    "high_52w": 255.83,
+    "low_52w": 123.17,
+    "timestamp": "2026-09-12T06:04:44.154009"
+  },
+  "get_portfolio_summary": {
+    "total_market_value": 74911.52,
+    "total_cost_basis": 64569.54,
+    "total_unrealized_gain": 10341.98,
+    "total_return_percent": 16.02,
+    "positions": [
+      {
+        "symbol": "AAPL",
+        "shares": 88,
+        "current_price": 188.54,
+        "cost_basis": 235.48,
+        "market_value": 16591.52,
+        "unrealized_gain": -4130.93,
+        "gain_percent": -19.93,
+        "weight": 22.15
+      },
+      {
+        "symbol": "MSFT",
+        "shares": 135,
+        "current_price": 432.0,
+        "cost_basis": 324.79,
+        "market_value": 58320.0,
+        "unrealized_gain": 14472.91,
+        "gain_percent": 33.01,
+        "weight": 77.85
+      }
+    ],
+    "as_of": "2026-09-12T06:04:44.155031"
+  },
+  "get_market_indices": {
+    "SP500": {
+      "name": "S&P 500",
+      "value": 5469.93,
+      "change": 37.83,
+      "change_percent": 0.7
+    },
+    "NASDAQ": {
+      "name": "NASDAQ",
+      "value": 17736.88,
+      "change": 156.38,
+      "change_percent": 0.89
+    },
+    "DOW": {
+      "name": "Dow Jones",
+      "value": 41071.26,
+      "change": -179.54,
+      "change_percent": -0.44
+    },
+    "IPC": {
+      "name": "IPC Mexico",
+      "value": 52794.53,
+      "change": -1045.67,
+      "change_percent": -1.94
+    },
+    "FTSE": {
+      "name": "FTSE 100",
+      "value": 8336.63,
+      "change": 16.23,
+      "change_percent": 0.2
+    }
+  },
+  "get_historical_prices": {
+    "symbol": "AAPL",
+    "period_days": 30,
+    "data": [
+      {
+        "date": "2026-08-13",
+        "open": 167.87,
+        "high": 168.22,
+        "low": 159.55,
+        "close": 162.14,
+        "volume": 49075255
+      },
+      {
+        "date": "2026-08-14",
+        "open": 162.14,
+        "high": 166.75,
+        "low": 161.42,
+        "close": 164.17,
+        "volume": 56898085
+      },
+      {
+        "date": "2026-08-15",
+        "open": 164.17,
+        "high": 167.15,
+        "low": 156.24,
+        "close": 159.29,
+        "volume": 10354514
+      },
+      {
+        "date": "2026-08-16",
+        "open": 159.29,
+        "high": 162.0,
+        "low": 158.69,
+        "close": 160.95,
+        "volume": 61106503
+      },
+      {
+        "date": "2026-08-17",
+        "open": 160.95,
+        "high": 167.5,
+        "low": 160.36,
+        "close": 164.89,
+        "volume": 68708972
+      },
+      {
+        "date": "2026-08-18",
+        "open": 164.89,
+        "high": 171.55,
+        "low": 161.71,
+        "close": 170.85,
+        "volume": 64548428
+      },
+      {
+        "date": "2026-08-19",
+        "open": 170.85,
+        "high": 172.87,
+        "low": 161.71,
+        "close": 164.31,
+        "volume": 38531838
+      },
+      {
+        "date": "2026-08-20",
+        "open": 164.31,
+        "high": 170.68,
+        "low": 163.25,
+        "close": 169.03,
+        "volume": 44514141
+      },
+      {
+        "date": "2026-08-21",
+        "open": 169.03,
+        "high": 171.29,
+        "low": 163.74,
+        "close": 166.62,
+        "volume": 29667801
+      },
+      {
+        "date": "2026-08-22",
+        "open": 166.62,
+        "high": 170.23,
+        "low": 164.67,
+        "close": 167.43,
+        "volume": 42369684
+      },
+      {
+        "date": "2026-08-23",
+        "open": 167.43,
+        "high": 169.89,
+        "low": 165.79,
+        "close": 168.44,
+        "volume": 9732236
+      },
+      {
+        "date": "2026-08-24",
+        "open": 168.44,
+        "high": 172.95,
+        "low": 167.21,
+        "close": 172.17,
+        "volume": 77785107
+      },
+      {
+        "date": "2026-08-25",
+        "open": 172.17,
+        "high": 175.38,
+        "low": 165.81,
+        "close": 168.59,
+        "volume": 70661418
+      },
+      {
+        "date": "2026-08-26",
+        "open": 168.59,
+        "high": 170.9,
+        "low": 163.16,
+        "close": 166.16,
+        "volume": 22073621
+      },
+      {
+        "date": "2026-08-27",
+        "open": 166.16,
+        "high": 166.84,
+        "low": 157.88,
+        "close": 160.06,
+        "volume": 37581400
+      },
+      {
+        "date": "2026-08-28",
+        "open": 160.06,
+        "high": 162.29,
+        "low": 157.5,
+        "close": 162.09,
+        "volume": 28996047
+      },
+      {
+        "date": "2026-08-29",
+        "open": 162.09,
+        "high": 164.46,
+        "low": 155.27,
+        "close": 156.31,
+        "volume": 51672222
+      },
+      {
+        "date": "2026-08-30",
+        "open": 156.31,
+        "high": 163.98,
+        "low": 156.02,
+        "close": 161.89,
+        "volume": 77282253
+      },
+      {
+        "date": "2026-08-31",
+        "open": 161.89,
+        "high": 163.14,
+        "low": 155.63,
+        "close": 155.65,
+        "volume": 25771317
+      },
+      {
+        "date": "2026-09-01",
+        "open": 155.65,
+        "high": 161.78,
+        "low": 155.17,
+        "close": 159.75,
+        "volume": 52655102
+      },
+      {
+        "date": "2026-09-02",
+        "open": 159.75,
+        "high": 160.19,
+        "low": 157.77,
+        "close": 159.88,
+        "volume": 43532853
+      },
+      {
+        "date": "2026-09-03",
+        "open": 159.88,
+        "high": 162.57,
+        "low": 154.77,
+        "close": 155.25,
+        "volume": 74944048
+      },
+      {
+        "date": "2026-09-04",
+        "open": 155.25,
+        "high": 155.28,
+        "low": 152.47,
+        "close": 153.75,
+        "volume": 14783374
+      },
+      {
+        "date": "2026-09-05",
+        "open": 153.75,
+        "high": 161.12,
+        "low": 152.52,
+        "close": 158.36,
+        "volume": 40986459
+      },
+      {
+        "date": "2026-09-06",
+        "open": 158.36,
+        "high": 159.58,
+        "low": 151.05,
+        "close": 152.26,
+        "volume": 25386665
+      },
+      {
+        "date": "2026-09-07",
+        "open": 152.26,
+        "high": 154.38,
+        "low": 145.39,
+        "close": 148.23,
+        "volume": 14660964
+      },
+      {
+        "date": "2026-09-08",
+        "open": 148.23,
+        "high": 149.05,
+        "low": 143.65,
+        "close": 143.85,
+        "volume": 19452350
+      },
+      {
+        "date": "2026-09-09",
+        "open": 143.85,
+        "high": 146.19,
+        "low": 141.34,
+        "close": 143.41,
+        "volume": 15995032
+      },
+      {
+        "date": "2026-09-10",
+        "open": 143.41,
+        "high": 145.8,
+        "low": 143.07,
+        "close": 144.13,
+        "volume": 41190591
+      },
+      {
+        "date": "2026-09-11",
+        "open": 144.13,
+        "high": 147.36,
+        "low": 143.87,
+        "close": 147.14,
+        "volume": 13990464
+      }
+    ],
+    "start_price": 162.14,
+    "end_price": 147.14,
+    "total_return": -9.25
+  },
+  "get_financial_news": [
+    {
+      "title": "Banxico Holds Rate at 11% Amid Inflation Concerns",
+      "sentiment": "neutral",
+      "source": "El Financiero",
+      "published_at": "2026-09-12T02:04:44"
+    },
+    {
+      "title": "IPC Alcanza Maximo de 6 Meses por Nearshoring",
+      "sentiment": "positive",
+      "source": "Expansion",
+      "published_at": "2026-09-12T03:04:44"
+    },
+    {
+      "title": "PEMEX Reporta Reduccion en Deuda Neta",
+      "sentiment": "positive",
+      "source": "BMV",
+      "published_at": "2026-09-11T20:04:44"
+    },
+    {
+      "title": "Grupo Financiero Banorte Supera Estimados de Utilidades",
+      "sentiment": "positive",
+      "source": "Milenio",
+      "published_at": "2026-09-11T06:04:44"
+    }
+  ],
+  "analyze_credit_risk": {
+    "risk_score": 100,
+    "risk_level": "LOW",
+    "recommendation": "APPROVE",
+    "debt_to_income_ratio": 0.3667,
+    "loan_to_income_ratio": 3.33,
+    "risk_factors": [],
+    "suggested_interest_rate": 5.5,
+    "analysis_date": "2026-09-12T06:04:44.156009"
+  },
+  "calculate_compound_interest": {
+    "final_balance": 109357.3,
+    "total_contributions": 10000.0,
+    "total_interest_earned": 99357.3,
+    "return_on_investment": 993.57,
+    "yearly_breakdown": [
+      {
+        "year": 1,
+        "balance": 10830.0,
+        "contributions": 10000.0,
+        "interest_earned": 830.0
+      },
+      {
+        "year": 2,
+        "balance": 11728.88,
+        "contributions": 10000.0,
+        "interest_earned": 1728.88
+      },
+      {
+        "year": 3,
+        "balance": 12702.37,
+        "contributions": 10000.0,
+        "interest_earned": 2702.37
+      },
+      {
+        "year": 4,
+        "balance": 13756.66,
+        "contributions": 10000.0,
+        "interest_earned": 3756.66
+      },
+      {
+        "year": 5,
+        "balance": 14898.46,
+        "contributions": 10000.0,
+        "interest_earned": 4898.46
+      },
+      {
+        "year": 6,
+        "balance": 16135.02,
+        "contributions": 10000.0,
+        "interest_earned": 6135.02
+      },
+      {
+        "year": 7,
+        "balance": 17474.22,
+        "contributions": 10000.0,
+        "interest_earned": 7474.22
+      },
+      {
+        "year": 8,
+        "balance": 18924.57,
+        "contributions": 10000.0,
+        "interest_earned": 8924.57
+      },
+      {
+        "year": 9,
+        "balance": 20495.3,
+        "contributions": 10000.0,
+        "interest_earned": 10495.3
+      },
+      {
+        "year": 10,
+        "balance": 22196.4,
+        "contributions": 10000.0,
+        "interest_earned": 12196.4
+      },
+      {
+        "year": 11,
+        "balance": 24038.69,
+        "contributions": 10000.0,
+        "interest_earned": 14038.69
+      },
+      {
+        "year": 12,
+        "balance": 26033.89,
+        "contributions": 10000.0,
+        "interest_earned": 16033.89
+      },
+      {
+        "year": 13,
+        "balance": 28194.69,
+        "contributions": 10000.0,
+        "interest_earned": 18194.69
+      },
+      {
+        "year": 14,
+        "balance": 30534.84,
+        "contributions": 10000.0,
+        "interest_earned": 20534.84
+      },
+      {
+        "year": 15,
+        "balance": 33069.21,
+        "contributions": 10000.0,
+        "interest_earned": 23069.21
+      },
+      {
+        "year": 16,
+        "balance": 35813.94,
+        "contributions": 10000.0,
+        "interest_earned": 25813.94
+      },
+      {
+        "year": 17,
+        "balance": 38786.48,
+        "contributions": 10000.0,
+        "interest_earned": 28786.48
+      },
+      {
+        "year": 18,
+        "balance": 42005.74,
+        "contributions": 10000.0,
+        "interest_earned": 32005.74
+      },
+      {
+        "year": 19,
+        "balance": 45492.2,
+        "contributions": 10000.0,
+        "interest_earned": 35492.2
+      },
+      {
+        "year": 20,
+        "balance": 49268.03,
+        "contributions": 10000.0,
+        "interest_earned": 39268.03
+      },
+      {
+        "year": 21,
+        "balance": 53357.25,
+        "contributions": 10000.0,
+        "interest_earned": 43357.25
+      },
+      {
+        "year": 22,
+        "balance": 57785.88,
+        "contributions": 10000.0,
+        "interest_earned": 47785.88
+      },
+      {
+        "year": 23,
+        "balance": 62582.07,
+        "contributions": 10000.0,
+        "interest_earned": 52582.07
+      },
+      {
+        "year": 24,
+        "balance": 67776.36,
+        "contributions": 10000.0,
+        "interest_earned": 57776.36
+      },
+      {
+        "year": 25,
+        "balance": 73401.76,
+        "contributions": 10000.0,
+        "interest_earned": 63401.76
+      },
+      {
+        "year": 26,
+        "balance": 79494.07,
+        "contributions": 10000.0,
+        "interest_earned": 69494.07
+      },
+      {
+        "year": 27,
+        "balance": 86092.04,
+        "contributions": 10000.0,
+        "interest_earned": 76092.04
+      },
+      {
+        "year": 28,
+        "balance": 93237.63,
+        "contributions": 10000.0,
+        "interest_earned": 83237.63
+      },
+      {
+        "year": 29,
+        "balance": 100976.31,
+        "contributions": 10000.0,
+        "interest_earned": 90976.31
+      },
+      {
+        "year": 30,
+        "balance": 109357.3,
+        "contributions": 10000.0,
+        "interest_earned": 99357.3
+      }
+    ]
+  },
+  "get_forex_rates": {
+    "base": "USD",
+    "timestamp": "2026-09-12T06:04:44.156009",
+    "rates": {
+      "EUR": 0.922,
+      "GBP": 0.7866,
+      "JPY": 149.9,
+      "MXN": 17.5128,
+      "CAD": 1.3592,
+      "AUD": 1.5226,
+      "CHF": 0.8964,
+      "CNY": 7.198,
+      "BRL": 5.0169,
+      "ARS": 897.5927,
+      "CLP": 932.8667,
+      "COP": 4167.4441
+    }
+  }
+}

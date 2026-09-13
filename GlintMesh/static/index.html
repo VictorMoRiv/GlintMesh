@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GlintMesh &mdash; A2UI over MCP Interface Mesh</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Victor+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Highlight.js -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+  <!-- Socket.io client -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+  <style>
+    /* ─── Design tokens (base = Glass Blue). Themes override these via /static/themes.json ─── */
+    :root {
+      --bg-deep:        #060a1e;
+      --bg-mid:         #0c1234;
+      --bg-top:         #101a4a;
+      --glass-bg:       linear-gradient(135deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02));
+      --glass-bg-hover: linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.04));
+      --glass-border:   rgba(255, 255, 255, 0.14);
+      --glass-border-strong: rgba(255, 255, 255, 0.24);
+      --glass-highlight: inset 0 1px 0 rgba(255,255,255,0.18);
+      --blur-amount:    24px;
+      --blur-soft:      14px;
+      --accent-blue:    #4f8ef7;
+      --accent-cyan:    #00d4ff;
+      --accent-purple:  #a78bfa;
+      --accent-green:   #10b981;
+      --accent-red:     #ef4444;
+      --accent-amber:   #f59e0b;
+      --text-primary:   #f0f4ff;
+      --text-secondary: rgba(240, 244, 255, 0.62);
+      --text-muted:     rgba(240, 244, 255, 0.38);
+      --gradient-main:  linear-gradient(135deg, #00d4ff 0%, #4f8ef7 55%, #a78bfa 100%);
+      --gradient-ok:    linear-gradient(90deg, #059669, #34d399);
+      --gradient-bg:    linear-gradient(160deg, var(--bg-deep) 0%, var(--bg-mid) 60%, var(--bg-top) 100%);
+      --sidebar-width:  250px;
+      --header-height:  66px;
+      --radius-lg:      18px;
+      --radius-md:      14px;
+      --radius-sm:      10px;
+      --shadow-glow:    0 0 44px rgba(0, 212, 255, 0.16);
+      --shadow-card:    0 12px 40px rgba(0, 0, 0, 0.45);
+      --transition:     all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+      /* surfaces */
+      --header-bg:      rgba(6,10,30,0.55);
+      --input-area-bg:  rgba(6,10,30,0.35);
+      --drawer-bg:      rgba(10,15,40,0.82);
+      --modal-bg:       rgba(10,15,40,0.95);
+      --toast-bg:       rgba(13,18,53,0.92);
+      --ns-bg:          rgba(255,255,255,0.03);
+      --code-bg:        rgba(0,0,0,0.45);
+      --pre-bg:         rgba(0,0,0,0.38);
+      --table-line:     rgba(255,255,255,0.04);
+      --grid-line:      rgba(255,255,255,0.05);
+      --riskbar-bg:     rgba(255,255,255,0.07);
+
+      /* background orbs + logo */
+      --orb-a:          #4f8ef7;
+      --orb-b:          #a78bfa;
+      --orb-c:          #00d4ff;
+      --orb-op:         0.32;
+      --logo-grad-1:    #059669;
+      --logo-grad-2:    #34d399;
+
+      /* accent tints derived from the theme hue */
+      --tint-cyan-bg:           rgba(0,212,255,0.14);
+      --tint-cyan-bd:           rgba(0,212,255,0.35);
+      --tint-cyan-active-bg:    rgba(0,212,255,0.12);
+      --tint-cyan-active-bd:    rgba(0,212,255,0.25);
+      --tint-cyan-focus-bd:     rgba(0,212,255,0.55);
+      --tint-cyan-focus-bs:     rgba(0,212,255,0.1);
+      --tint-blue-badge-bg:     rgba(79,142,247,0.2);
+      --tint-blue-hover-bg:     rgba(79,142,247,0.14);
+      --tint-blue-hover-bd:     rgba(79,142,247,0.4);
+      --tint-purple-bg:         rgba(167,139,250,0.14);
+      --tint-purple-bd:         rgba(167,139,250,0.4);
+      --glow-cyan:              rgba(0,212,255,0.45);
+      --glow-cyan-soft:         rgba(0,212,255,0.35);
+      --glow-cyan-stream:       rgba(0,212,255,0.1);
+      --glow-cyan-faint:        rgba(0,212,255,0.08);
+      --glow-blue-soft:         rgba(79,142,247,0.4);
+      --info-bd:                rgba(0,212,255,0.4);
+
+      /* semantic status colors */
+      --ok-color:               #34d399;
+      --ok-bd:                  rgba(52,211,153,0.35);
+      --ok-soft-bd:             rgba(52,211,153,0.3);
+      --ok-mid-bd:              rgba(52,211,153,0.4);
+      --ok-active-bd:           rgba(52,211,153,0.5);
+      --ok-tint-bg:             rgba(16,185,129,0.14);
+      --ok-soft-bg:             rgba(52,211,153,0.08);
+      --tint-ok-bg:             rgba(16,185,129,0.2);
+      --ok-dot-glow:            rgba(16,185,129,0.8);
+      --ok-chart:               #34d399;
+      --ok-chart-fill:          rgba(52,211,153,0.15);
+      --err-color:              #f87171;
+      --err-bd:                 rgba(239,68,68,0.4);
+      --err-bd-strong:          rgba(239,68,68,0.5);
+      --err-tint-bg:            rgba(239,68,68,0.12);
+      --tint-err-bg:            rgba(239,68,68,0.2);
+      --warn-color:             #fbbf24;
+      --warn-bd:                rgba(245,158,11,0.5);
+      --tint-warn-bg:           rgba(245,158,11,0.2);
+      --chart-secondary:        #64748b;
+    }
+    #gmBolt stop:first-child { stop-color: var(--logo-grad-1); }
+    #gmBolt stop:last-child { stop-color: var(--logo-grad-2); }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--gradient-bg);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Triple orbs + noise for deeper glass */
+    body::before, body::after { content:''; position: fixed; border-radius:50%; pointer-events:none; z-index:0; filter: blur(90px); opacity:var(--orb-op); animation: orbFloat 22s ease-in-out infinite alternate; }
+    body::before { width:720px; height:720px; background: radial-gradient(circle, var(--orb-a) 0%, transparent 70%); top:-220px; left:-200px; }
+    body::after { width:560px; height:560px; background: radial-gradient(circle, var(--orb-b) 0%, transparent 70%); bottom:-140px; right:-120px; animation-delay:-11s; }
+    #bg-orb-3 { position:fixed; width:480px; height:480px; border-radius:50%; pointer-events:none; z-index:0; filter:blur(100px); opacity:0.22; background: radial-gradient(circle, var(--orb-c) 0%, transparent 70%); top:38%; left:44%; animation: orbFloat 26s ease-in-out infinite alternate-reverse; }
+    #bg-noise { position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.05; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+    @keyframes orbFloat { from { transform: translate(0,0) scale(1);} to { transform: translate(46px,32px) scale(1.09);} }
+
+    #app-shell { position:relative; z-index:1; display:flex; flex-direction:column; height:100vh; }
+
+    /* ─── Header ─── */
+    #header {
+      height: var(--header-height); flex-shrink:0; display:flex; align-items:center; padding:0 22px;
+      background: var(--header-bg); backdrop-filter: blur(var(--blur-amount)) saturate(160%); -webkit-backdrop-filter: blur(var(--blur-amount)) saturate(160%);
+      border-bottom:1px solid var(--glass-border); box-shadow: var(--glass-highlight); gap:14px;
+    }
+    .logo-mark { width:38px; height:38px; background:var(--gradient-main); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:19px; font-weight:800; color:#fff; flex-shrink:0; box-shadow:0 0 24px var(--glow-cyan), inset 0 1px 0 rgba(255,255,255,0.35); }
+    .logo-text { font-size:26px; font-weight:700; font-family:'Victor Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; letter-spacing:-0.3px; line-height:1; white-space:nowrap; }
+    .logo-sub { font-size:10.5px; font-weight:600; color:var(--text-secondary); letter-spacing:0.8px; text-transform:uppercase; }
+    .version-pill { font-size:11px; font-weight:600; color:var(--text-secondary); background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:20px; padding:5px 12px; backdrop-filter:blur(10px); display:flex; align-items:center; gap:6px; white-space:nowrap; box-shadow:var(--glass-highlight); }
+    .version-pill i { color:var(--accent-cyan); font-size:12px; }
+    #header .header-actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
+    .btn-glass { background:var(--glass-bg); border:1px solid var(--glass-border); color:var(--text-secondary); border-radius:var(--radius-sm); padding:7px 14px; font-size:13px; font-weight:500; transition:var(--transition); backdrop-filter:blur(var(--blur-soft)) saturate(150%); cursor:pointer; display:inline-flex; align-items:center; gap:6px; text-decoration:none; box-shadow:var(--glass-highlight); }
+    .btn-glass:hover { background:var(--glass-bg-hover); border-color:var(--glass-border-strong); color:var(--text-primary); transform:translateY(-1px); }
+    .lang-toggle { display:flex; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:10px; padding:2px; gap:2px; backdrop-filter:blur(10px); }
+    .lang-toggle button { border:none; background:transparent; color:var(--text-muted); font-size:12px; font-weight:700; padding:5px 10px; border-radius:8px; cursor:pointer; transition:var(--transition); }
+    .lang-toggle button.active { background:var(--gradient-main); color:#fff; box-shadow:0 2px 10px var(--glow-blue-soft); }
+
+    /* ─── Layout ─── */
+    #main-body { flex:1; display:flex; overflow:hidden; padding:12px; gap:12px; }
+    #sidebar { width:var(--sidebar-width); flex-shrink:0; display:flex; flex-direction:column; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); backdrop-filter:blur(var(--blur-amount)) saturate(160%); -webkit-backdrop-filter:blur(var(--blur-amount)) saturate(160%); box-shadow:var(--glass-highlight), var(--shadow-card); overflow:hidden; }
+    #sidebar-footer { display:flex; gap:6px; margin-top:auto; padding:10px 12px 12px; }
+    #sidebar-footer .btn-glass { flex:1; width:40px; height:40px; padding:0; justify-content:center; font-size:15px; border-radius:var(--radius-md); background:var(--glass-bg-hover); border-color:var(--glass-border-strong); box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), var(--glass-highlight); }
+    #sidebar-footer .btn-glass:hover { background:var(--glass-bg); }
+    #agent-status-bar { padding:14px 18px; border-bottom:1px solid var(--glass-border); display:flex; align-items:center; gap:10px; min-height:54px; }
+    #tool-feed { flex:1; min-height:0; overflow-y:auto; }
+    .agent-icon { width:34px; height:34px; background:linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; box-shadow:0 0 16px var(--glow-cyan-soft), inset 0 1px 0 rgba(255,255,255,0.3); }
+    #status-text { font-size:12px; font-weight:500; color:var(--text-secondary); }
+    #status-text.active { color:var(--accent-cyan); } #status-text.error { color:var(--accent-red); } #status-text.success { color:var(--accent-green); }
+    #tool-feed { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+    #tool-feed::-webkit-scrollbar { width:4px; } #tool-feed::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.14); border-radius:4px; }
+    .tool-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-sm); padding:10px 12px; font-size:12px; animation:slideInLeft .3s ease; transition:var(--transition); backdrop-filter:blur(var(--blur-soft)); box-shadow:var(--glass-highlight); }
+    .tool-card:hover { background:var(--glass-bg-hover); border-color:var(--glass-border-strong); }
+    @keyframes slideInLeft { from{opacity:0; transform:translateX(-12px);} to{opacity:1; transform:none;} }
+    .tool-card .tool-name { font-weight:600; color:var(--accent-cyan); display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+    .tool-card .tool-data { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-secondary); word-break:break-all; line-height:1.5; }
+    .proto-badge { font-size:9px; font-weight:700; letter-spacing:0.6px; padding:2px 6px; border-radius:6px; background:var(--tint-cyan-bg); border:1px solid var(--tint-cyan-bd); color:var(--accent-cyan); }
+    .proto-badge.mcp { background:var(--tint-purple-bg); border-color:var(--tint-purple-bd); color:var(--accent-purple); }
+    .tool-status-icon { width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; flex-shrink:0; }
+    .tool-status-icon.calling { background:var(--tint-warn-bg); color:var(--accent-amber); } .tool-status-icon.done { background:var(--tint-ok-bg); color:var(--accent-green); } .tool-status-icon.error { background:var(--tint-err-bg); color:var(--accent-red); }
+    #prompt-suggestions { padding:12px; border-top:1px solid var(--glass-border); display:flex; flex-direction:column; gap:6px; max-height:46%; overflow-y:auto; }
+    .suggestion-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); margin-bottom:2px; }
+    .suggestion-label-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    #btn-add-prompt { padding:1px 9px; font-size:14px; line-height:1.5; }
+    #prompt-suggestions { padding:12px 12px 8px; }
+    #prompt-list { display:flex; flex-direction:column; gap:6px; max-height:210px; overflow-y:auto; }
+    .prompt-row { display:flex; align-items:center; gap:4px; }
+    .prompt-row .suggestion-chip { flex:1; min-width:0; }
+    .prompt-row .suggestion-chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .prompt-menu-wrap { position:relative; flex-shrink:0; }
+    .prompt-act { width:24px; height:24px; padding:0; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid transparent; border-radius:6px; color:var(--text-muted); font-size:13px; cursor:pointer; opacity:.55; transition:var(--transition); }
+    .prompt-row:hover .prompt-act { opacity:1; }
+    .prompt-act:hover { background:var(--glass-bg-hover); border-color:var(--glass-border-strong); color:var(--text-primary); }
+    .prompt-menu { display:none; position:absolute; right:0; top:calc(100% + 4px); z-index:40; flex-direction:column; gap:2px; min-width:130px; background:var(--modal-bg); border:1px solid var(--glass-border-strong); border-radius:10px; padding:4px; box-shadow:var(--shadow-card), var(--glass-highlight); }
+    .prompt-menu.open { display:flex; }
+    .prompt-menu-item { display:flex; align-items:center; gap:8px; width:100%; padding:6px 10px; font-size:12px; color:var(--text-secondary); background:transparent; border:none; border-radius:7px; cursor:pointer; text-align:left; }
+    .prompt-menu-item:hover { background:var(--glass-bg-hover); color:var(--text-primary); }
+    .prompt-menu-item.pm-pin.on { color:var(--ok-color); }
+    .prompt-menu-item.pm-del { color:var(--err-color); }
+    .prompt-menu-item.pm-del:hover { background:var(--err-tint-bg); }
+    .suggestion-chip { background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 12px; font-size:12px; color:var(--text-secondary); cursor:pointer; transition:var(--transition); display:flex; align-items:center; gap:8px; text-align:left; backdrop-filter:blur(8px); }
+    .suggestion-chip:hover { background:var(--tint-blue-hover-bg); border-color:var(--tint-blue-hover-bd); color:var(--text-primary); transform:translateX(2px); }
+    .suggestion-chip i { color:var(--accent-cyan); flex-shrink:0; font-size:13px; }
+
+    /* ─── Content ─── */
+    #content-area { flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); backdrop-filter:blur(var(--blur-amount)) saturate(160%); box-shadow:var(--glass-highlight), var(--shadow-card); }
+    #tab-bar { display:flex; align-items:center; padding:0 16px; border-bottom:1px solid var(--glass-border); height:48px; gap:4px; flex-shrink:0; }
+    .tab-btn { padding:7px 10px; border-radius:8px; font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:var(--transition); background:transparent; border:none; display:flex; align-items:center; gap:0; white-space:nowrap; }
+    .tab-btn .tab-label { max-width:0; opacity:0; overflow:hidden; margin-left:0; transition:max-width .25s ease, opacity .2s ease, margin-left .25s ease; }
+    .tab-btn:hover .tab-label, .tab-btn.active .tab-label { max-width:130px; opacity:1; margin-left:6px; }
+    .tab-btn:hover { color:var(--text-primary); background:rgba(255,255,255,0.06); } .tab-btn.active { color:var(--accent-cyan); background:var(--tint-cyan-active-bg); border:1px solid var(--tint-cyan-active-bd); }
+    .tab-btn .tab-badge { background:var(--tint-blue-badge-bg); color:var(--accent-blue); font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px; margin-left:6px; }
+    #panel-container { flex:1; overflow:hidden; position:relative; }
+    .panel { position:absolute; inset:0; display:none; } .panel.active { display:flex; flex-direction:column; }
+    #panel-preview, #panel-a2ui { padding:20px; overflow-y:auto; }
+    #welcome-state { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding:40px; }
+    .welcome-icon { width:84px; height:84px; background:var(--glass-bg); border:1px solid var(--glass-border-strong); border-radius:26px; display:flex; align-items:center; justify-content:center; font-size:36px; margin-bottom:24px; box-shadow:var(--shadow-glow), var(--glass-highlight); backdrop-filter:blur(16px); }
+    .welcome-title { font-size:30px; font-weight:800; margin-bottom:12px; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1.2; }
+    .welcome-desc { font-size:14px; color:var(--text-secondary); max-width:460px; line-height:1.7; margin-bottom:30px; }
+    .welcome-features { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; width:100%; max-width:580px; margin-bottom:28px; }
+    .feature-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:18px 12px; text-align:center; transition:var(--transition); backdrop-filter:blur(var(--blur-soft)) saturate(150%); box-shadow:var(--glass-highlight); }
+    .feature-card:hover { background:var(--glass-bg-hover); border-color:var(--glass-border-strong); transform:translateY(-3px); box-shadow:var(--shadow-glow); }
+    .feature-card .fc-icon { font-size:22px; color:var(--accent-cyan); margin-bottom:8px; }
+    .feature-card .fc-title { font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:4px; } .feature-card .fc-desc { font-size:11px; color:var(--text-secondary); line-height:1.4; }
+    #generated-wrapper { display:none; flex-direction:column; gap:16px; } #generated-wrapper.visible { display:flex; }
+    .agent-message-bubble { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:14px 18px; font-size:13px; color:var(--text-secondary); line-height:1.6; backdrop-filter:blur(12px); display:flex; gap:12px; align-items:flex-start; animation:fadeInUp .4s ease; box-shadow:var(--glass-highlight); }
+    .agent-avatar { width:28px; height:28px; background:var(--gradient-main); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
+    @keyframes fadeInUp { from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:none;} }
+    #preview-frame-container { background:var(--ns-bg); border:1px solid var(--glass-border-strong); border-radius:var(--radius-lg); overflow:hidden; backdrop-filter:blur(12px); box-shadow:var(--shadow-card), 0 0 30px var(--glow-cyan-faint); animation:fadeInUp .5s ease .1s both; }
+    .preview-topbar { display:flex; align-items:center; padding:10px 16px; background:rgba(255,255,255,0.04); border-bottom:1px solid var(--glass-border); gap:8px; }
+    .preview-dots { display:flex; gap:6px; } .preview-dot { width:10px; height:10px; border-radius:50%; } .dot-red{background:#ff5f57;} .dot-yellow{background:#febc2e;} .dot-green{background:#28c840;}
+    .preview-url-bar { flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:6px; padding:4px 12px; font-size:11px; color:var(--text-secondary); font-family:'JetBrains Mono',monospace; }
+    .btn-preview-action { background:transparent; border:none; color:var(--text-secondary); cursor:pointer; padding:4px 8px; border-radius:4px; font-size:14px; transition:var(--transition); }
+    .btn-preview-action:hover { color:var(--text-primary); background:rgba(255,255,255,0.08); }
+    #preview-iframe { width:100%; border:none; background:#fff; min-height:500px; display:block; }
+
+    /* A2UI cards */
+    .a2ui-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-left:3px solid var(--accent-cyan); border-radius:var(--radius-md); padding:14px 16px; backdrop-filter:blur(12px); box-shadow:var(--glass-highlight); animation:fadeInUp .35s ease; }
+    .a2ui-card .a2ui-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:12.5px; font-weight:700; }
+    .a2ui-card pre { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-secondary); background:var(--pre-bg); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; margin:0; max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
+
+    /* Code */
+    #panel-code { overflow:hidden; } #code-container { flex:1; overflow-y:auto; padding:20px; }
+    #code-output { background:var(--code-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:20px; font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.7; color:var(--text-primary); white-space:pre-wrap; word-break:break-all; min-height:200px; backdrop-filter:blur(8px); }
+    #code-output.streaming { border-color:var(--tint-cyan-focus-bd); box-shadow:0 0 20px var(--glow-cyan-stream); }
+
+    /* Chat input */
+    #chat-input-area { padding:14px 16px 10px; border-top:1px solid var(--glass-border); flex-shrink:0; background:var(--input-area-bg); backdrop-filter:blur(16px); }
+    #input-wrapper { display:flex; gap:10px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:10px 14px; transition:var(--transition); box-shadow:var(--glass-highlight); backdrop-filter:blur(12px); }
+    #input-wrapper:focus-within { border-color:var(--tint-cyan-focus-bd); box-shadow:0 0 0 3px var(--tint-cyan-focus-bs); }
+    #chat-textarea { flex:1; background:transparent; border:none; outline:none; color:var(--text-primary); font-family:'Inter',sans-serif; font-size:14px; resize:none; min-height:22px; max-height:120px; line-height:1.5; caret-color:var(--accent-cyan); }
+    #chat-textarea::placeholder { color:var(--text-muted); }
+    #send-btn { background:var(--gradient-main); border:none; border-radius:var(--radius-sm); width:36px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:var(--transition); flex-shrink:0; align-self:flex-end; box-shadow:0 4px 14px var(--glow-cyan-soft); }
+    #send-btn:hover { transform:scale(1.08); } #send-btn:active { transform:scale(0.96); } #send-btn:disabled { opacity:0.4; cursor:not-allowed; transform:none; } #send-btn i { color:#fff; font-size:16px; }
+    #input-footer { display:flex; align-items:center; justify-content:space-between; margin-top:8px; font-size:11px; color:var(--text-muted); }
+
+    .thinking-dots { display:inline-flex; gap:4px; align-items:center; } .thinking-dots span { width:5px; height:5px; background:var(--accent-cyan); border-radius:50%; animation:bounce 1.2s ease-in-out infinite; }
+    .thinking-dots span:nth-child(2){animation-delay:.2s;} .thinking-dots span:nth-child(3){animation-delay:.4s;}
+    @keyframes bounce { 0%,80%,100%{transform:scale(.6); opacity:.4;} 40%{transform:scale(1); opacity:1;} }
+
+    /* Tools drawer */
+    #tools-overlay { position:fixed; inset:0; background:rgba(3,6,18,0.55); backdrop-filter:blur(4px); z-index:9000; display:none; }
+    #tools-overlay.open { display:block; }
+    #tools-drawer { position:fixed; top:0; right:0; width:min(420px,94vw); height:100vh; z-index:9001; background:var(--drawer-bg); backdrop-filter:blur(28px) saturate(170%); border-left:1px solid var(--glass-border-strong); box-shadow:-20px 0 60px rgba(0,0,0,0.5); transform:translateX(105%); transition:transform .32s cubic-bezier(0.4,0,0.2,1); display:flex; flex-direction:column; }
+    #tools-drawer.open { transform:none; }
+    .drawer-head { padding:18px 20px 14px; border-bottom:1px solid var(--glass-border); display:flex; align-items:flex-start; gap:10px; }
+    .drawer-head h5 { margin:0; font-size:15px; font-weight:700; } .drawer-head p { margin:4px 0 0; font-size:12px; color:var(--text-secondary); }
+    #tools-list { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+    .mcp-server-row { font-size:11px; font-weight:700; letter-spacing:0.6px; text-transform:uppercase; color:var(--accent-cyan); display:flex; align-items:center; gap:8px; margin-top:4px; }
+    .mcp-tool { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:12px; padding:12px 14px; box-shadow:var(--glass-highlight); }
+    .mcp-tool .mcp-name { font-family:'JetBrains Mono',monospace; font-size:12.5px; font-weight:600; color:var(--text-primary); display:flex; align-items:center; gap:8px; }
+    .mcp-dot { width:8px; height:8px; border-radius:50%; background:var(--accent-green); box-shadow:0 0 8px var(--ok-dot-glow); flex-shrink:0; }
+    .mcp-dot.off { background:var(--text-muted); box-shadow:none; }
+    .mcp-tool .mcp-desc { font-size:12px; color:var(--text-secondary); margin-top:6px; line-height:1.5; }
+    .mcp-tool details { margin-top:8px; } .mcp-tool summary { font-size:11px; color:var(--accent-cyan); cursor:pointer; } .mcp-tool pre { font-size:10.5px; background:var(--pre-bg); border-radius:8px; padding:8px 10px; margin-top:6px; overflow:auto; color:var(--text-secondary); }
+
+    #toast-container { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+    .toast-item { background:var(--toast-bg); backdrop-filter:blur(16px); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:12px 16px; font-size:13px; color:var(--text-primary); display:flex; align-items:center; gap:10px; animation:toastIn .3s ease; min-width:240px; max-width:340px; box-shadow:var(--shadow-card); }
+    .toast-item.success{border-color:var(--ok-mid-bd);} .toast-item.error{border-color:var(--err-bd);} .toast-item.info{border-color:var(--info-bd);}
+    @keyframes toastIn { from{opacity:0; transform:translateY(20px) scale(.95);} to{opacity:1; transform:none;} }
+    * { scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.14) transparent; }
+    @media (max-width: 860px) { :root{--sidebar-width:0px;} #sidebar{display:none;} #main-body{padding:8px;} .welcome-features{grid-template-columns:1fr;} }
+
+    /* ─── A2UI Socket.io Animations ─── */
+    @keyframes a2uiSlideIn { from { opacity:0; transform:translateY(20px) scale(0.96); } to { opacity:1; transform:translateY(0) scale(1); } }
+    @keyframes a2uiGlow { 0% { box-shadow: 0 0 0 0 var(--glow-cyan); } 50% { box-shadow: 0 0 24px 4px var(--glow-cyan); } 100% { box-shadow: 0 0 0 0 var(--glow-cyan); } }
+    @keyframes a2uiPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+    @keyframes a2uiShake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+    @keyframes a2uiCelebrate { 0% { transform: scale(1); } 25% { transform: scale(1.03) rotate(-1deg); } 50% { transform: scale(1.05) rotate(1deg); } 75% { transform: scale(1.03) rotate(-0.5deg); } 100% { transform: scale(1) rotate(0); } }
+    @keyframes a2uiFadeIn { from { opacity:0; } to { opacity:1; } }
+    @keyframes priceFlash { 0% { background: transparent; } 50% { background: rgba(0,212,255,0.15); } 100% { background: transparent; } }
+    @keyframes dataFlow { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    @keyframes socketConnect { from { transform: scale(0.8); opacity:0; } to { transform: scale(1); opacity:1; } }
+
+    .a2ui-animate-slide { animation: a2uiSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) both; }
+    .a2ui-animate-glow { animation: a2uiGlow 1.2s ease-in-out; }
+    .a2ui-animate-pulse { animation: a2uiPulse 0.6s ease-in-out; }
+    .a2ui-animate-shake { animation: a2uiShake 0.5s ease-in-out; }
+    .a2ui-animate-celebrate { animation: a2uiCelebrate 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+    .a2ui-animate-fadein { animation: a2uiFadeIn 0.4s ease; }
+    .price-flash { animation: priceFlash 0.8s ease; }
+
+    .data-flow-bar {
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--accent-cyan), var(--accent-purple), transparent);
+      background-size: 200% 100%;
+      animation: dataFlow 2s linear infinite;
+      border-radius: 2px;
+      margin: 8px 0;
+    }
+
+    .socket-status {
+      position: fixed;
+      bottom: 12px;
+      left: 12px;
+      z-index: 9998;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--toast-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 4px 10px;
+      animation: socketConnect 0.4s ease;
+    }
+    .socket-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-red);
+      transition: background 0.3s;
+    }
+    .socket-dot.connected { background: var(--accent-green); box-shadow: 0 0 8px var(--ok-dot-glow); }
+
+    .a2ui-surface {
+      position: relative;
+      overflow: hidden;
+    }
+    .a2ui-surface::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 50%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+      transition: left 0.6s ease;
+    }
+    .a2ui-surface:hover::after {
+      left: 100%;
+    }
+
+    .live-ticker {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--ok-soft-bg);
+      border: 1px solid var(--ok-soft-bd);
+      color: var(--ok-color);
+    }
+    .live-ticker::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--ok-color);
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+  </style>
+  <style id="a2ui-native">
+    /* ─── A2UI native components (rendered from MCP data, no model code) ─── */
+    .a2ui-body { display:flex; flex-direction:column; gap:10px; }
+    .a2ui-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
+    .a2ui-metric { background:var(--ns-bg); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; }
+    .a2ui-mlabel { font-size:10.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; }
+    .a2ui-mval { font-size:15px; font-weight:700; margin-top:2px; }
+    .a2ui-hero { display:flex; align-items:center; justify-content:space-between; }
+    .a2ui-sym { font-size:12px; font-weight:700; letter-spacing:1px; color:var(--text-secondary); }
+    .a2ui-price { font-size:24px; font-weight:800; display:flex; align-items:center; gap:10px; }
+    .a2ui-delta { font-size:11px; font-weight:700; padding:3px 8px; border-radius:12px; white-space:nowrap; }
+    .a2ui-delta.up { background:var(--ok-tint-bg); color:var(--ok-color); border:1px solid var(--ok-bd); }
+    .a2ui-delta.down { background:var(--err-tint-bg); color:var(--err-color); border:1px solid var(--err-bd); }
+    .a2ui-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .a2ui-table th { text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); padding:6px 8px; border-bottom:1px solid var(--glass-border); }
+    .a2ui-table td { padding:7px 8px; border-bottom:1px solid var(--table-line); }
+    .a2ui-head-row { display:flex; align-items:center; gap:10px; }
+    .a2ui-news { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--table-line); }
+    .a2ui-news-title { font-size:12.5px; font-weight:600; line-height:1.45; }
+    .a2ui-sent { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; padding:3px 8px; border-radius:10px; white-space:nowrap; }
+    .a2ui-sent.pos { background:var(--ok-tint-bg); color:var(--ok-color); border:1px solid var(--ok-bd); }
+    .a2ui-sent.neg { background:var(--err-tint-bg); color:var(--err-color); border:1px solid var(--err-bd); }
+    .a2ui-sent.neu { background:rgba(148,163,184,.12); color:#94a3b8; border:1px solid rgba(148,163,184,.3); }
+    .a2ui-riskbar { height:8px; border-radius:6px; background:var(--riskbar-bg); overflow:hidden; }
+    .a2ui-riskbar div { height:100%; border-radius:6px; background:var(--gradient-ok); }
+    .a2ui-factors { margin:0; padding-left:18px; font-size:12px; color:var(--text-secondary); display:flex; flex-direction:column; gap:4px; }
+    .a2ui-canvas-wrap { position:relative; height:220px; }
+    .a2ui-canvas-wrap canvas { width:100% !important; height:100% !important; }
+    .a2ui-raw { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-secondary);
+background:var(--pre-bg); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; margin:0;
+max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
+    .proto-badge.live { background:var(--ok-tint-bg); border-color:var(--ok-bd); color:var(--ok-color); }
+  </style>
+  <style id="theme-css"></style>
+  <style id="user-css"></style>
+</head>
+
+<body data-theme="red">
+<div id="bg-orb-3"></div>
+<div id="bg-noise"></div>
+<div id="app-shell">
+
+  <header id="header">
+    <div class="logo-text">GlintMesh</div>
+    <div class="header-actions">
+      <button class="btn-glass" id="btn-auth" title="Sign in">
+        <span id="auth-avatar" style="display:none; width:22px; height:22px; border-radius:50%; overflow:hidden; flex-shrink:0;"><img id="auth-avatar-img" style="width:100%; height:100%; object-fit:cover;" /></span>
+        <i class="bi bi-person-circle" id="auth-icon"></i>
+        <span id="auth-label" data-i18n="signin">Sign in</span>
+      </button>
+      <div class="version-pill" title="A2UI over MCP">
+        <span id="version-label">GlintMesh &bull; v2</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="main-body">
+    <aside id="sidebar">
+      <div id="prompt-suggestions">
+        <div class="suggestion-label suggestion-label-row">
+          <span data-i18n="quick_prompts">Quick Prompts</span>
+          <button class="btn-glass" id="btn-add-prompt" title="Add quick prompt"><i class="bi bi-plus-lg"></i></button>
+        </div>
+        <div id="prompt-list"></div>
+      </div>
+
+      <div id="agent-status-bar">
+        <div class="agent-icon"><i class="bi bi-cpu-fill" style="color:#fff; font-size:15px;"></i></div>
+        <div>
+          <div style="font-size:11px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;" data-i18n="agent_status">Agent Status</div>
+          <div id="status-text" data-i18n="ready">Ready to generate interfaces</div>
+        </div>
+      </div>
+
+      <div id="tool-feed">
+        <div style="text-align:center; padding:24px 16px; color:var(--text-muted); font-size:12px; line-height:1.6;">
+          <i class="bi bi-diagram-3" style="font-size:24px; display:block; margin-bottom:10px;"></i>
+          <span data-i18n="tool_empty">MCP tool calls will appear here as the agent works</span>
+        </div>
+      </div>
+
+      <div id="sidebar-footer">
+        <button class="btn-glass" id="btn-settings" title="Options" style="position:relative;"><i class="bi bi-gear"></i><span id="settings-dot" style="display:none; position:absolute; top:6px; right:6px; width:7px; height:7px; border-radius:50%; background:var(--ok-color);"></span></button>
+        <button class="btn-glass" id="btn-data" title="Upload your own dataset"><i class="bi bi-database"></i></button>
+        <a class="btn-glass" href="#" id="btn-export" title="Export generated HTML"><i class="bi bi-download"></i></a>
+      </div>
+    </aside>
+
+    <main id="content-area">
+      <div id="tab-bar">
+        <button class="tab-btn active" data-tab="preview" style="margin-left:auto;"><i class="bi bi-display"></i><span class="tab-label" data-i18n="preview">Vista</span></button>
+        <button class="tab-btn" data-tab="a2ui"><i class="bi bi-grid-1x2"></i><span class="tab-label" data-i18n="a2ui">A2UI</span><span class="tab-badge" id="a2ui-badge" style="display:none;">0</span></button>
+        <button class="tab-btn" data-tab="code"><i class="bi bi-code-slash"></i><span class="tab-label" data-i18n="code">Code</span><span class="tab-badge" id="code-badge" style="display:none;">HTML</span></button>
+        <div class="d-flex align-items-center gap-2">
+          <div id="progress-bar-container" style="display:none; align-items:center; gap:8px;">
+            <div class="thinking-dots"><span></span><span></span><span></span></div>
+            <span style="font-size:12px; color:var(--text-secondary);" id="progress-label">Processing...</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="panel-container">
+        <div class="panel active" id="panel-preview">
+          <div id="welcome-state">
+            <div class="welcome-icon"><i class="bi bi-grid-1x2-fill" style="color:var(--accent-cyan);"></i></div>
+            <div class="welcome-title">GlintMesh</div>
+            <div class="welcome-desc" data-i18n="welcome_desc">Describe any financial dashboard in plain language. GlintMesh fetches MCP data and renders it as A2UI surfaces in seconds.</div>
+            <div class="welcome-features">
+              <div class="feature-card">
+                <div class="fc-icon"><i class="bi bi-graph-up"></i></div>
+                <div class="fc-title" data-i18n="f1t">Live Market Data</div>
+                <div class="fc-desc" data-i18n="f1d">Real-time quotes, indices, and price history</div>
+              </div>
+              <div class="feature-card">
+                <div class="fc-icon"><i class="bi bi-grid-1x2"></i></div>
+                <div class="fc-title">A2UI</div>
+                <div class="fc-desc" data-i18n="f2d">Typed UI surfaces streamed over MCP</div>
+              </div>
+              <div class="feature-card">
+                <div class="fc-icon"><i class="bi bi-hdd-network"></i></div>
+                <div class="fc-title">MCP Mesh</div>
+                <div class="fc-desc" id="mcp-description" data-i18n="f3d">Demo tools enabled (simulated data)</div>
+              </div>
+            </div>
+            <div style="font-size:13px; color:var(--text-muted);" data-i18n="welcome_hint">Type a request below or choose a quick prompt from the sidebar</div>
+            <div id="model-description" style="font-size:11px; color:var(--text-muted); margin-top:8px;"></div>
+          </div>
+
+          <div id="generated-wrapper">
+            <div class="agent-message-bubble" id="user-bubble" style="display:none; border-color:var(--tint-blue-hover-bd);">
+              <div class="agent-avatar" style="background:var(--gradient-main);"><i class="bi bi-person-fill" style="color:#fff; font-size:12px;"></i></div>
+              <div style="flex:1;"><div id="user-bubble-text" style="color:var(--text-primary);"></div><div id="user-bubble-imgs" style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;"></div></div>
+            </div>
+            <div class="agent-message-bubble" id="agent-bubble" style="display:none;">
+              <div class="agent-avatar"><i class="bi bi-robot" style="color:#fff; font-size:12px;"></i></div>
+              <div id="agent-bubble-text"></div>
+            </div>
+            <button class="btn-glass" id="btn-retry" style="display:none; align-self:flex-start; border-color:var(--warn-bd); color:var(--accent-amber);"><i class="bi bi-arrow-clockwise"></i> <span data-i18n="retry">Retry</span></button>
+            <div id="preview-frame-container" style="display:none;">
+              <div class="preview-topbar">
+                <div class="preview-dots"><div class="preview-dot dot-red"></div><div class="preview-dot dot-yellow"></div><div class="preview-dot dot-green"></div></div>
+                <div class="preview-url-bar">glintmesh://a2ui-surface</div>
+                <button class="btn-preview-action" id="btn-reload-preview" title="Reload preview"><i class="bi bi-arrow-clockwise"></i></button>
+                <button class="btn-preview-action" id="btn-fullscreen" title="Open in new tab"><i class="bi bi-box-arrow-up-right"></i></button>
+                <button class="btn-preview-action" id="btn-share" title="Copy shareable link"><i class="bi bi-link-45deg"></i></button>
+              </div>
+              <iframe id="preview-iframe" title="Generated Financial Interface" sandbox="allow-scripts"></iframe>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-a2ui">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <button class="btn-glass btn-sm" id="btn-refresh-data"><i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh_data">Refresh data</span></button>
+            <button class="btn-glass btn-sm" id="btn-compose"><i class="bi bi-grid-1x2-fill"></i> <span data-i18n="compose">Compose dashboard</span></button>
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); cursor:pointer;">
+              <input type="checkbox" id="auto-refresh" style="accent-color:var(--ok-color);" /> <span data-i18n="auto_60">Auto 60s</span>
+            </label>
+            <span id="refresh-note" style="font-size:11px; color:var(--text-muted);"></span>
+          </div>
+          <div id="a2ui-feed" style="display:flex; flex-direction:column; gap:12px; padding:4px;">
+            <div id="a2ui-empty" style="text-align:center; padding:60px 20px; color:var(--text-muted); font-size:13px;">
+              <i class="bi bi-grid-1x2" style="font-size:28px; display:block; margin-bottom:12px;"></i>
+              <span data-i18n="a2ui_empty">A2UI surfaces from MCP tool calls will render here</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-code">
+          <div id="code-container">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <div style="font-size:13px; font-weight:600; color:var(--text-secondary); display:flex; align-items:center; gap:8px;">
+                <i class="bi bi-file-earmark-code" style="color:var(--accent-cyan);"></i>
+                <span data-i18n="generated_html">Generated HTML</span>
+              </div>
+              <button class="btn-glass btn-sm" id="btn-copy-code" style="display:none;"><i class="bi bi-clipboard"></i> <span data-i18n="copy">Copy</span></button>
+            </div>
+            <pre id="code-output"><code style="color:var(--text-muted); font-size:12px;">// Generated code will appear here...</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div id="chat-input-area">
+        <div id="dataset-chip" style="display:none; align-items:center; gap:8px; margin-bottom:8px; font-size:12px; color:var(--text-secondary); background:var(--ok-soft-bg); border:1px solid var(--ok-soft-bd); border-radius:8px; padding:6px 10px;">
+          <i class="bi bi-database" style="color:var(--ok-color);"></i>
+          <span id="dataset-chip-name"></span>
+          <button id="dataset-chip-x" style="margin-left:auto; background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:14px;" title="Remove">&times;</button>
+        </div>
+        <div id="img-strip" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:12px; padding:8px;"></div>
+        <div id="input-wrapper">
+          <button id="style-btn" type="button" title="Interface style" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-brush"></i></button>
+          <textarea id="chat-textarea" rows="1" maxlength="500" data-i18n-ph="placeholder" placeholder="Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'"></textarea>
+          <button id="mic-btn" type="button" title="Voice input" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-mic"></i></button>
+          <button id="img-btn" type="button" title="Attach chart images (financial charts only)" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-image"></i></button>
+          <button id="send-btn" title="Generate interface"><i class="bi bi-arrow-up"></i></button>
+        </div>
+        <input type="file" id="img-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none;" />
+        <div id="input-footer">
+          <span data-i18n="disclaimer">GlintMesh may produce simulated financial data for demonstration purposes</span>
+          <span id="char-count">0 / 500</span>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Tools drawer -->
+<div id="tools-overlay"></div>
+<aside id="tools-drawer" aria-label="MCP tools">
+  <div class="drawer-head">
+    <div style="flex:1;">
+      <h5><i class="bi bi-hdd-network" style="color:var(--accent-cyan);"></i> <span data-i18n="drawer_title">Connected MCPs</span></h5>
+      <p id="tools-drawer-sub" data-i18n="drawer_sub">Servers and tools available to the agent</p>
+    </div>
+    <button class="btn-glass" id="btn-close-tools"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div id="tools-list"></div>
+</aside>
+
+<!-- Data modal -->
+<div id="data-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
+<div id="data-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(480px,94vw); max-height:84vh; overflow-y:auto; background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-database" style="color:var(--ok-color);"></i> <span data-i18n="datasets_title">My datasets</span></h5>
+    <button class="btn-glass" id="btn-close-data" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="datasets_sub">Upload CSV or JSON (max 2 MB). The agent builds the interface from your data.</p>
+  <div style="display:flex; gap:8px; margin-bottom:14px;">
+    <input type="file" id="data-file" accept=".csv,.json" style="flex:1; font-size:12px; color:var(--text-secondary);" />
+    <button class="btn-glass" id="btn-upload"><i class="bi bi-upload"></i> <span data-i18n="upload">Upload</span></button>
+  </div>
+  <div id="data-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+</div>
+
+<!-- Interface style modal -->
+<div id="style-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9300;"></div>
+<div id="style-modal" style="display:none; position:fixed; z-index:9301; top:50%; left:50%; transform:translate(-50%,-50%); width:min(540px,94vw); max-height:84vh; overflow-y:auto; background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-brush" style="color:var(--ok-color);"></i> <span data-i18n="style_title">Interface style</span></h5>
+    <button class="btn-glass" id="btn-close-style" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="style_sub">Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).</p>
+  <div id="style-presets" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+    <button class="btn-glass btn-sm" data-preset="minimalist"><span data-i18n="s_min">Minimalist enterprise</span></button>
+    <button class="btn-glass btn-sm" data-preset="glass"><span data-i18n="s_glass">Glassmorphism</span></button>
+    <button class="btn-glass btn-sm" data-preset="dark"><span data-i18n="s_dark">Simple dark</span></button>
+    <button class="btn-glass btn-sm" data-preset="corporate"><span data-i18n="s_corp">Classic corporate</span></button>
+    <button class="btn-glass btn-sm" data-preset="custom"><span data-i18n="s_custom">Custom</span></button>
+  </div>
+  <textarea id="style-textarea" rows="5" maxlength="1000" data-i18n-ph="style_ph" placeholder="E.g.: dark mode with green accents and big numbers..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
+  <div style="display:flex; align-items:center; gap:8px; margin-top:10px;">
+    <span id="style-count" style="font-size:11px; color:var(--text-muted);">0 / 1000</span>
+    <span style="flex:1;"></span>
+    <button class="btn-glass" id="btn-style-reset"><span data-i18n="reset_default">Reset</span></button>
+    <button class="btn-glass" id="btn-style-save" style="border-color:var(--ok-mid-bd); color:var(--ok-color);"><i class="bi bi-check"></i> <span data-i18n="save">Save</span></button>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settings-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
+<div id="settings-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(520px,94vw); max-height:84vh; overflow-y:auto; background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-gear" style="color:var(--ok-color);"></i> <span data-i18n="settings">Configuración</span></h5>
+    <button class="btn-glass" id="btn-close-settings" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div style="margin-bottom:14px;">
+    <div style="font-size:12px; font-weight:700; margin-bottom:8px;" data-i18n="options_menu">Options</div>
+    <div class="lang-toggle" role="group" aria-label="Language" style="margin-bottom:8px;">
+      <button id="lang-es" class="active">ES</button>
+      <button id="lang-en">EN</button>
+    </div>
+    <div style="display:flex; gap:6px;">
+      <button class="btn-glass" id="btn-tools" style="flex:1;" title="View connected MCP tools"><i class="bi bi-tools"></i> <span data-i18n="tools">Tools</span></button>
+      <button class="btn-glass" id="btn-clear" style="flex:1;" title="Clear current session"><i class="bi bi-arrow-counterclockwise"></i> <span data-i18n="clear">Clear</span></button>
+    </div>
+  </div>
+  <hr style="border-color:var(--glass-border); margin:16px 0;" />
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:12px; font-weight:600; min-width:110px;" data-i18n="model_label">Model</span>
+      <select id="gen-model" style="flex:1; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--text-primary); outline:none;"></select>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:12px; font-weight:600; min-width:110px;" data-i18n="creativity">Creativity</span>
+      <input type="range" id="gen-temp" min="0" max="100" value="70" style="flex:1; accent-color:var(--ok-color);" />
+      <span id="gen-temp-val" style="font-size:12px; color:var(--text-secondary); min-width:32px; text-align:right;">0.7</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:12px; font-weight:600; min-width:110px;" data-i18n="mode_label">Mode</span>
+      <div style="display:flex; gap:6px; flex:1;">
+        <button class="btn-glass btn-sm" id="mode-full" style="flex:1;"><span data-i18n="mode_full">Full interface</span></button>
+        <button class="btn-glass btn-sm" id="mode-data" style="flex:1;"><span data-i18n="mode_data">Data only</span></button>
+      </div>
+    </div>
+  </div>
+  <hr style="border-color:var(--glass-border); margin:16px 0;" />
+  <div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:700;" data-i18n="app_look">App appearance</div>
+      <button class="btn-glass btn-sm" id="btn-reset-look" style="margin-left:auto;"><span data-i18n="reset_look">Reset look</span></button>
+    </div>
+    <div id="theme-grid" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
+    <div role="group" aria-label="Dark / light" style="display:flex; gap:6px; margin-bottom:10px;">
+      <button class="btn-glass btn-sm" id="ui-auto" style="flex:1;"><span data-i18n="ui_auto">Auto</span></button>
+      <button class="btn-glass btn-sm" id="ui-dark" style="flex:1;"><span data-i18n="ui_dark">Dark</span></button>
+      <button class="btn-glass btn-sm" id="ui-light" style="flex:1;"><span data-i18n="ui_light">Light</span></button>
+    </div>
+    <textarea id="user-css-textarea" rows="3" maxlength="3000" data-i18n-ph="css_ph" placeholder="Un solo prompt de diseño: pega un snippet o escribe tu CSS..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:6px;" data-i18n="css_hint">Applies live to this app only. Never affects generated interfaces.</div>
+  </div>
+  <hr style="border-color:var(--glass-border); margin:16px 0;" />
+  <div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <div style="font-size:12px; font-weight:700;" data-i18n="data_mgmt">Saved data</div>
+      <button class="btn-glass btn-sm" id="btn-wipe-all" style="margin-left:auto; border-color:var(--err-bd); color:var(--err-color);"><span data-i18n="del_all">Delete all</span></button>
+    </div>
+    <div id="settings-session" style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;"></div>
+    <div id="settings-datasets" style="display:flex; flex-direction:column; gap:6px;"></div>
+  </div>
+
+<!-- Wipe confirm modal -->
+<div id="wipe-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.7); z-index:9020;"></div>
+<div id="wipe-modal" style="display:none; position:fixed; z-index:9021; top:50%; left:50%; transform:translate(-50%,-50%); width:min(420px,92vw); background:var(--modal-bg); border:1px solid var(--err-bd); border-radius:14px; padding:20px;">
+  <h5 style="margin:0 0 8px; font-size:15px; font-weight:700; color:var(--err-color);" data-i18n="wipe_title">Delete saved data?</h5>
+  <p id="wipe-text" style="font-size:12.5px; color:var(--text-secondary); margin:0 0 16px;"></p>
+  <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+    <button class="btn-glass" id="btn-wipe-cancel"><span data-i18n="cancel">Cancel</span></button>
+    <button class="btn-glass" id="btn-wipe-keep" style="border-color:var(--ok-mid-bd); color:var(--ok-color);"><span data-i18n="keep_imp">Keep important</span></button>
+    <button class="btn-glass" id="btn-wipe-all2" style="border-color:var(--err-bd-strong); color:var(--err-color);"><span data-i18n="del_everything">Delete everything</span></button>
+  </div>
+</div>
+</div>
+
+<div id="toast-container"></div>
+
+<!-- Socket status indicator -->
+<div class="socket-status" id="socket-status">
+  <div class="socket-dot" id="socket-dot"></div>
+  <span id="socket-label">Realtime</span>
+</div>
+
+<!-- Auth modal -->
+<div id="auth-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
+<div id="auth-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(400px,92vw); background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-person-circle" style="color:var(--ok-color);"></i> <span data-i18n="signin_title">Sign in</span></h5>
+    <button class="btn-glass" id="btn-close-auth" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <div id="auth-profile" style="display:none; align-items:center; gap:12px; background:var(--ok-soft-bg); border:1px solid var(--ok-soft-bd); border-radius:10px; padding:10px 12px;">
+      <span style="position:relative; width:48px; height:48px; border-radius:50%; overflow:hidden; background:rgba(255,255,255,0.06); flex-shrink:0; display:flex; align-items:center; justify-content:center;">
+        <img id="auth-profile-img" style="display:none; width:100%; height:100%; object-fit:cover;" />
+        <i class="bi bi-person-fill" id="auth-profile-icon" style="font-size:22px; color:var(--text-secondary);"></i>
+      </span>
+      <div style="flex:1; min-width:0;">
+        <div id="auth-profile-name" style="font-size:14px; font-weight:700; overflow:hidden; text-overflow:ellipsis;"></div>
+        <div style="font-size:11px; color:var(--text-secondary);" data-i18n="session_saved">Session saved while signed in</div>
+      </div>
+      <button class="btn-glass btn-sm" id="btn-avatar-pick" type="button"><i class="bi bi-camera"></i></button>
+    </div>
+    <div id="auth-guest-note" style="font-size:11px; color:var(--accent-amber);" data-i18n="guest_note">Guest mode: your info is lost when you leave the chat. Sign in to keep it.</div>
+    <input id="auth-user" maxlength="30" placeholder="user" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+    <input id="auth-pass" type="password" maxlength="100" placeholder="password" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+    <input type="file" id="auth-avatar-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" />
+    <div id="auth-note" style="font-size:11px; color:var(--text-muted);">Local account. Optional for demo.</div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn-glass" id="btn-login" style="flex:1; border-color:var(--ok-mid-bd); color:var(--ok-color);"><span data-i18n="signin">Sign in</span></button>
+      <button class="btn-glass" id="btn-register" style="flex:1;"><span data-i18n="signup">Register</span></button>
+      <button class="btn-glass" id="btn-logout" style="flex:1; display:none; border-color:var(--err-bd); color:var(--err-color);"><span>Out</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit / add quick prompt modal -->
+<div id="prompt-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9100;"></div>
+<div id="prompt-modal" style="display:none; position:fixed; z-index:9101; top:50%; left:50%; transform:translate(-50%,-50%); width:min(440px,92vw); background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-lightning-charge" style="color:var(--ok-color);"></i> <span id="prompt-modal-title">Quick prompt</span></h5>
+    <button class="btn-glass" id="btn-close-prompt" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <div>
+      <div style="font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Español</div>
+      <textarea id="prompt-es" rows="2" maxlength="500" placeholder="Prompt en español (opcional)" style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
+    </div>
+    <div>
+      <div style="font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">English</div>
+      <textarea id="prompt-en" rows="2" maxlength="500" placeholder="English prompt (optional)" style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button class="btn-glass" id="btn-prompt-cancel"><span data-i18n="cancel">Cancel</span></button>
+      <button class="btn-glass" id="btn-prompt-save" style="border-color:var(--ok-mid-bd); color:var(--ok-color);"><i class="bi bi-check"></i> <span data-i18n="save">Save</span></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  // ─── Socket.io Client ────────────────────────────────────────────────────
+  const socket = io({ transports: ['websocket', 'polling'] });
+  const socketDot = document.getElementById('socket-dot');
+  const socketLabel = document.getElementById('socket-label');
+
+  socket.on('connect', () => {
+    socketDot.classList.add('connected');
+    socketLabel.textContent = 'Live';
+    console.log('[Socket.io] Connected:', socket.id);
+    socket.emit('join_room', { room: 'a2ui_updates' });
+  });
+
+  socket.on('disconnect', () => {
+    socketDot.classList.remove('connected');
+    socketLabel.textContent = 'Offline';
+    console.log('[Socket.io] Disconnected');
+  });
+
+  socket.on('connected', (data) => {
+    console.log('[Socket.io] Server message:', data.message, '| Users:', data.users_count);
+  });
+
+  // ─── A2UI Animation Events ───────────────────────────────────────────────
+  socket.on('generation_start', (data) => {
+    console.log('[Socket.io] Generation started:', data.message);
+    animateSocketEvent('pulse');
+  });
+
+  socket.on('tool_call', (data) => {
+    console.log('[Socket.io] Tool call:', data.tool);
+    animateSocketEvent('glow');
+    const feed = document.getElementById('tool-feed');
+    if (feed) {
+      const flowBar = document.createElement('div');
+      flowBar.className = 'data-flow-bar';
+      flowBar.id = 'flow-' + data.tool;
+      feed.appendChild(flowBar);
+    }
+  });
+
+  socket.on('tool_result', (data) => {
+    console.log('[Socket.io] Tool result:', data.tool, data.failed ? 'FAILED' : 'OK');
+    const flowBar = document.getElementById('flow-' + data.tool);
+    if (flowBar) flowBar.remove();
+    animateSocketEvent(data.failed ? 'shake' : 'celebrate');
+  });
+
+  socket.on('a2ui_update', (data) => {
+    console.log('[Socket.io] A2UI update:', data.surface_type);
+    animateA2UICards(data.animation);
+  });
+
+  socket.on('price_update', (data) => {
+    console.log('[Socket.io] Price:', data.symbol, data.price);
+    flashPriceElement(data.symbol);
+  });
+
+  socket.on('generation_complete', (data) => {
+    console.log('[Socket.io] Generation complete');
+    animateSocketEvent('celebrate');
+    celebrateA2UI();
+  });
+
+  socket.on('generation_error', (data) => {
+    console.log('[Socket.io] Error:', data.message);
+    animateSocketEvent('shake');
+  });
+
+  socket.on('data_refresh', (data) => {
+    console.log('[Socket.io] Data refreshed');
+    animateA2UICards('fadeIn');
+  });
+
+  // ─── Animation Helpers ───────────────────────────────────────────────────
+  function animateSocketEvent(type) {
+    const cards = document.querySelectorAll('.a2ui-card');
+    cards.forEach((card, i) => {
+      setTimeout(() => {
+        card.classList.remove('a2ui-animate-slide', 'a2ui-animate-glow', 'a2ui-animate-pulse', 'a2ui-animate-shake', 'a2ui-animate-celebrate');
+        void card.offsetWidth;
+        card.classList.add('a2ui-animate-' + type);
+      }, i * 80);
+    });
+  }
+
+  function animateA2UICards(animType) {
+    const cards = document.querySelectorAll('.a2ui-card');
+    cards.forEach((card, i) => {
+      setTimeout(() => {
+        card.classList.remove('a2ui-animate-slide', 'a2ui-animate-glow', 'a2ui-animate-fadein');
+        void card.offsetWidth;
+        card.classList.add('a2ui-animate-' + animType);
+      }, i * 100);
+    });
+  }
+
+  function flashPriceElement(symbol) {
+    const els = document.querySelectorAll('.a2ui-sym');
+    els.forEach((el) => {
+      if (el.textContent.trim() === symbol) {
+        const card = el.closest('.a2ui-card') || el.closest('.a2ui-metric');
+        if (card) {
+          card.classList.add('price-flash');
+          setTimeout(() => card.classList.remove('price-flash'), 800);
+        }
+      }
+    });
+  }
+
+  function celebrateA2UI() {
+    const cards = document.querySelectorAll('.a2ui-card');
+    cards.forEach((card, i) => {
+      setTimeout(() => {
+        card.classList.add('a2ui-animate-celebrate');
+        card.style.borderLeftColor = 'var(--accent-cyan)';
+        setTimeout(() => {
+          card.style.borderLeftColor = '';
+          card.classList.remove('a2ui-animate-celebrate');
+        }, 1000);
+      }, i * 150);
+    });
+  }
+</script>
+<script type="module" src="/static/app.js?v=13"></script>
+</body>
+</html>
