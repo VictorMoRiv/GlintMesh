@@ -13,7 +13,7 @@ const I18N = {
     f3d: 'Herramientas demo activadas (datos simulados)', f3d_off: 'MCP desactivado; Gemini genera con datos de ejemplo',
     welcome_hint: 'Escribe abajo o elige un prompt rápido del sidebar',
     a2ui_empty: 'Las superficies A2UI de las llamadas MCP se renderizarán aquí',
-    generated_html: 'HTML generado', copy: 'Copiar', disclaimer: 'GlintMesh puede producir datos financieros simulados con fines demostrativos',
+    generated_html: 'HTML generado', copy: 'Copiar', disclaimer: 'GlintMesh puede cometer errores. Verifica la información importante.',
     placeholder: "Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'",
     drawer_title: 'MCPs conectados', drawer_sub: 'Servidores y herramientas disponibles para el agente',
     data: 'Datos', datasets_title: 'Mis datasets', datasets_sub: 'Sube CSV o JSON (máx 2 MB). El agente construye la interfaz con tus datos.',
@@ -49,7 +49,7 @@ const I18N = {
     f3d: 'Demo tools enabled (simulated data)', f3d_off: 'MCP disabled; Gemini generates with sample data',
     welcome_hint: 'Type a request below or choose a quick prompt from the sidebar',
     a2ui_empty: 'A2UI surfaces from MCP tool calls will render here',
-    generated_html: 'Generated HTML', copy: 'Copy', disclaimer: 'GlintMesh may produce simulated financial data for demonstration purposes',
+    generated_html: 'Generated HTML', copy: 'Copy', disclaimer: 'GlintMesh can make mistakes. Verify important information.',
     placeholder: "Describe a financial interface... e.g. 'Build me a real-time stock portfolio dashboard'",
     drawer_title: 'Connected MCPs', drawer_sub: 'Servers and tools available to the agent',
     data: 'Data', datasets_title: 'My datasets', datasets_sub: 'Upload CSV or JSON (max 2 MB). The agent builds the interface from your data.',
@@ -86,6 +86,9 @@ function applyLang(next) {
   localStorage.setItem('glintmesh-lang', lang);
   document.documentElement.lang = lang;
   document.querySelectorAll('[data-i18n]').forEach((el) => {
+    // #auth-label muestra el username cuando hay sesión; no sobrescribirlo aquí.
+    // refreshAuthLabel() es quien decide entre username y "Sign in"/"Entrar".
+    if (el.id === 'auth-label') return;
     const key = el.getAttribute('data-i18n');
     if (I18N[lang][key]) el.textContent = I18N[lang][key];
   });
@@ -94,6 +97,7 @@ function applyLang(next) {
   });
   document.getElementById('lang-es').classList.toggle('active', lang === 'es');
   document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+  if (typeof refreshAuthLabel === 'function') refreshAuthLabel();
 }
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -350,16 +354,65 @@ function syncSettingsUI() {
   document.querySelectorAll('#style-presets [data-preset]').forEach((b) => {
     b.style.borderColor = b.dataset.preset === stylePreset ? cv('--ok-active-bd') : '';
   });
-  const sel = $('gen-model');
-  sel.innerHTML = '<option value="">default</option>' + (cachedHealth && cachedHealth.models ? cachedHealth.models.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') : '');
-  if (genModel && ![...sel.options].some((o) => o.value === genModel)) {
-    const opt = document.createElement('option'); opt.value = genModel; opt.textContent = genModel; opt.selected = true; sel.appendChild(opt);
-  }
+  refreshModelButton();
   $('gen-temp').value = Math.round(genTemp * 100);
   $('gen-temp-val').textContent = Number(genTemp).toFixed(1);
   $('mode-full').style.borderColor = genMode === 'full' ? cv('--ok-active-bd') : '';
   $('mode-data').style.borderColor = genMode === 'data' ? cv('--ok-active-bd') : '';
   refreshSettingsSession();
+}
+// ─── Selector de modelos junto al input (al lado del pincel) ────────────────
+function availableModels() {
+  const list = (cachedHealth && Array.isArray(cachedHealth.models) && cachedHealth.models.length)
+    ? [...cachedHealth.models]
+    : [];
+  if (genModel && !list.includes(genModel)) list.push(genModel);
+  return list;
+}
+function shortModelName(m) {
+  if (!m) return 'default';
+  // acorta "gemini-3.6-flash" -> "3.6-flash" para que quepa junto al pincel
+  return String(m).replace(/^gemini-/i, '');
+}
+function refreshModelButton() {
+  const label = $('model-btn-label');
+  if (label) label.textContent = shortModelName(genModel);
+  const btn = $('model-btn');
+  if (btn) {
+    btn.title = genModel ? ('Model: ' + genModel) : 'Model: default';
+    btn.style.borderColor = genModel ? 'var(--ok-mid-bd)' : 'var(--glass-border)';
+  }
+}
+function renderModelList() {
+  const box = $('model-list');
+  if (!box) return;
+  const models = availableModels();
+  const items = ['', ...models.filter((m) => m)];
+  box.innerHTML = items.map((m) => {
+    const active = (m || '') === (genModel || '');
+    const name = m ? escapeHtml(m) : 'default';
+    return '<button type="button" data-model="' + escapeHtml(m) + '" style="display:flex; align-items:center; gap:8px; width:100%; text-align:left; padding:8px 10px; font-size:12.5px; border-radius:8px; cursor:pointer; border:1px solid ' + (active ? 'var(--ok-mid-bd)' : 'transparent') + '; background:' + (active ? 'var(--ok-soft-bg)' : 'transparent') + '; color:' + (active ? 'var(--ok-color)' : 'var(--text-primary)') + ';">'
+      + '<i class="bi ' + (active ? 'bi-check-circle-fill' : 'bi-cpu') + '"></i><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + name + '</span></button>';
+  }).join('') || '<div style="font-size:12px;color:var(--text-muted); padding:6px 8px;">No models</div>';
+  box.querySelectorAll('[data-model]').forEach((b) => b.addEventListener('click', () => {
+    genModel = b.getAttribute('data-model') || '';
+    persistSettings();
+    refreshModelButton();
+    renderModelList();
+    closeModelPopover();
+  }));
+}
+function toggleModelPopover() {
+  const pop = $('model-popover');
+  if (!pop) return;
+  const open = pop.style.display === 'block';
+  if (open) { closeModelPopover(); return; }
+  renderModelList();
+  pop.style.display = 'block';
+}
+function closeModelPopover() {
+  const pop = $('model-popover');
+  if (pop) pop.style.display = 'none';
 }
 function openSettings() {
   syncSettingsUI();
@@ -395,7 +448,12 @@ $('style-textarea').addEventListener('input', (e) => {
   if (e.target.value !== (STYLE_PRESETS[stylePreset] || '')) stylePreset = 'custom';
   openSettingsRefresh();
 });
-$('gen-model').addEventListener('change', (e) => { genModel = e.target.value; persistSettings(); refreshSettingsDot(); });
+$('model-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleModelPopover(); });
+document.addEventListener('click', (e) => {
+  const pop = $('model-popover');
+  if (pop && pop.style.display === 'block' && !e.target.closest('#model-popover') && !e.target.closest('#model-btn')) closeModelPopover();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModelPopover(); });
 $('gen-temp').addEventListener('input', (e) => {
   genTemp = Math.round(Number(e.target.value)) / 100;
   $('gen-temp-val').textContent = genTemp.toFixed(1);
@@ -415,6 +473,7 @@ $('btn-style-reset').addEventListener('click', () => {
   stylePrompt = ''; stylePreset = 'minimalist'; genModel = ''; genTemp = 0.7; genMode = 'full';
   try { localStorage.removeItem(STYLE_KEY); } catch (e) {}
   refreshSettingsDot();
+  refreshModelButton();
   closeStyle();
 });
 function refreshSettingsSession() {
@@ -505,7 +564,7 @@ async function wipeAll(keepImportant) {
     try { localStorage.removeItem(STYLE_KEY); localStorage.removeItem(UI_KEY); localStorage.removeItem(IMPORTANT_KEY); } catch (e) {}
     stylePrompt = ''; stylePreset = 'minimalist'; genModel = ''; genTemp = 0.7; genMode = 'full';
 themeId = 'red'; uiScheme = 'auto'; userCss = '';
-    applyTheme(); refreshSettingsDot();
+    applyTheme(); refreshSettingsDot(); refreshModelButton();
   }
   if (activeDataset && !(keepImportant && imp.datasets.includes(activeDataset.id))) {
   activeDataset = null; refreshDatasetChip();
@@ -1315,6 +1374,24 @@ $('btn-logout').addEventListener('click', async () => {
 window.addEventListener('beforeunload', () => {
   if (!isAuthed()) { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
 });
+// Valida el token guardado contra el backend para mantener el username.
+// Si el token sigue siendo válido, refresca user/avatar desde el servidor.
+// Si es inválido, limpia solo el auth (no la sesión) y muestra Sign in.
+async function validateAuth() {
+  const s = currentAuth();
+  if (!s.token) { refreshAuthLabel(); return; }
+  try {
+    const res = await fetch('/api/auth/me', { headers: authHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data && data.user) {
+      const next = { ...s, user: data.user, avatar: data.avatar || s.avatar || null };
+      try { localStorage.setItem(AUTH_KEY, JSON.stringify(next)); } catch (e) {}
+    } else {
+      try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
+    }
+  } catch (e) { /* sin red: conserva el user local para no parpadear a Sign in */ }
+  refreshAuthLabel();
+}
 // ─── Avatar: foto de perfil (max ~300 KB) ──────────────────────────────────
 $('btn-avatar-pick').addEventListener('click', () => $('auth-avatar-input').click());
 $('auth-avatar-input').addEventListener('change', (e) => {
@@ -1394,12 +1471,18 @@ async function loadConfiguration() {
 }
 function refreshConfigLabels() {
   if (!cachedHealth) return;
-  $('model-description').textContent = 'Model: ' + cachedHealth.model + ' • A2UI over MCP • v' + (cachedHealth.version || '2.0.0');
+  const active = genModel || cachedHealth.model;
+  const desc = $('model-description');
+  if (desc) desc.textContent = 'Model: ' + active + ' • A2UI over MCP • v' + (cachedHealth.version || '2.0.0');
   const mcpEl = $('mcp-description');
   if (mcpEl) mcpEl.textContent = cachedHealth.mcp_enabled ? t('f3d') : t('f3d_off');
   const v = $('version-label');
   if (v) v.textContent = 'GlintMesh • v' + (cachedHealth.version || '2.0.0');
+  refreshModelButton();
 }
 applyLang(lang);
+refreshAuthLabel();
+refreshModelButton();
 restoreSession();
 loadConfiguration();
+validateAuth();
