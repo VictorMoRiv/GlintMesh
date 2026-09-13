@@ -1,10 +1,6 @@
 # GlintMesh 💠 — Interfaces financieras generadas con IA
 
-**HackMTY · A2UI over MCP Interface Mesh**
-
 > Describe tu dashboard en lenguaje natural y GlintMesh lo construye en segundos: la IA entiende qué le pides, trae los datos en vivo vía MCP (Yahoo, BCE, MongoDB) y los renderiza como superficies A2UI listas para usar — sin escribir una sola línea de HTML.
-
-**Pitch de 30s:** los dashboards financieros toman días y mezclan datos falsos con reales. GlintMesh genera la interfaz con Gemini o Groq, etiqueta cada dato (`LIVE / SIM / USER / MONGODB`), refresca sin gastar cuota y te avisa cuando un precio cruza tu umbral. Todo corre con FastAPI + MCP estándar.
 
 ---
 
