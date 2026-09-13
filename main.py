@@ -8,12 +8,13 @@ import re
 import sys
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from google import genai
@@ -75,7 +76,51 @@ def _secondary_configured() -> bool:
     return bool(GROQ_API_KEY or DEEPSEEK_API_KEY)
 MCP_ENABLED = os.getenv("MCP_ENABLED", "false").lower() in {"true", "1", "yes"}
 
-app = FastAPI(title="GlintMesh", version="2.0.0")
+# ─── Capas opcionales: MongoDB (Motor, con fallback a archivos) y Socket.io ──
+# Ambas son portadas de la rama feature/mongodb-socketio-a2ui. Si las
+# dependencias no están instaladas, la app sigue funcionando sin ellas.
+try:
+    import mongo_store as _mongo_store
+    from mongo_store import connect_db, close_db
+
+    _MONGO_STORE = True
+except Exception:
+    _mongo_store = None  # type: ignore[assignment]
+    _MONGO_STORE = False
+
+    async def connect_db():  # type: ignore[no-redef]
+        return None
+
+    async def close_db():  # type: ignore[no-redef]
+        return None
+
+
+def _mongodb_enabled() -> bool:
+    """Lee el flag en vivo (no una copia): cambia tras el lifespan si hay URI."""
+    try:
+        return bool(_MONGO_STORE and _mongo_store is not None and _mongo_store.MONGODB_AVAILABLE)
+    except Exception:
+        return False
+
+try:
+    import socketio as _socketio
+    from socket_events import sio as _sio
+
+    SOCKETIO_AVAILABLE = True
+except Exception:
+    _socketio = None
+    _sio = None
+    SOCKETIO_AVAILABLE = False
+
+
+async def lifespan(app: FastAPI):
+    """Startup/shutdown: abre y cierra MongoDB (no-op con fallback a archivos)."""
+    await connect_db()
+    yield
+    await close_db()
+
+
+app = FastAPI(title="GlintMesh", version="2.0.0", lifespan=lifespan)
 
 SYSTEM_PROMPT = """You are GlintMesh, an assistant that builds financial web interfaces over MCP with A2UI surfaces.
 Respond in the user's language (Spanish 'es' or English 'en' as instructed in the user message prefix).
@@ -811,7 +856,15 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
                      dataset_text: str | None = None, style_prompt: str | None = None,
                      model_choice: str | None = None, temperature: float | None = None,
                      mode: str = "full", images: list | None = None,
-                     provider: str | None = None) -> AsyncIterator[str]:
+                     provider: str | None = None,
+                     notify_token: str | None = None) -> AsyncIterator[str]:
+    async def _pub(kind: str, text: str) -> None:
+        """Mirror progress to the user's other live sockets (cross-tab liveness)."""
+        if notify_token:
+            try:
+                await live.notify_agent(notify_token, kind, text)
+            except Exception:
+                pass
     chosen_provider = (provider or LLM_PROVIDER or "auto").strip().lower()
     if chosen_provider not in {"gemini", "groq", "deepseek", "auto"}:
         chosen_provider = "auto"
@@ -819,12 +872,15 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
     if chosen_provider == "deepseek":
         chosen_provider = "groq"
 
+    yield event("status", content="Connecting to Gemini...")
+    await _pub("status", "Connecting to Gemini...")
     mcp_tools = []
     if MCP_ENABLED:
         try:
             mcp_tools = await mcp_client.list_tools()
         except Exception:
             yield event("error", content="MCP tools are unavailable. Check the MCP server or set MCP_ENABLED=false.")
+            await _pub("error", "MCP tools are unavailable.")
             return
 
     if chosen_provider == "groq":
@@ -901,6 +957,7 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
             "do NOT break and do NOT output any HTML block: reply in 1-2 sentences explaining you can "
             "only build interfaces from financial charts/graphics, and ask for a proper one.]"))
         yield event("status", content=f"Analyzing {n_images} image(s)...")
+        await _pub("status", f"Analyzing {n_images} image(s)...")
     contents = [types.Content(role="user", parts=first_parts)]
     if context:
         contents.append(types.Content(role="user", parts=[types.Part(
@@ -959,12 +1016,15 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
 
                     if finish_reason and finish_reason != types.FinishReason.STOP:
                         yield event("error", content="Gemini could not finish this response. Try a shorter or different request.")
+                        await _pub("error", "Gemini could not finish this response.")
                         return
                     if not function_calls:
                         if has_text:
                             yield event("done", content="Response complete")
+                            await _pub("done", "Response complete")
                         else:
                             yield event("error", content="Gemini returned no text. Try a different request.")
+                            await _pub("error", "Gemini returned no text.")
                         return
 
                     contents.append(types.Content(role="model", parts=model_parts))
@@ -973,6 +1033,7 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
                         call_args = dict(call.args or {})
                         yield event("tool_call", content=f"Fetching {call.name.replace('_', ' ')}...",
                                     tool=call.name, args=call_args)
+                        await _pub("tool", f"Fetching {call.name.replace('_', ' ')}...")
                         try:
                             if call.name not in allowed_tools:
                                 raise ValueError("Unknown tool")
@@ -987,12 +1048,15 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
                         )))
                     contents.append(types.Content(role="user", parts=results))
                     yield event("status", content="Generating interface from tool results...")
+                    await _pub("status", "Generating interface from tool results...")
                 yield event("error", content="Tool call limit reached. Please try a simpler request.")
+                await _pub("error", "Tool call limit reached.")
                 return
         except Exception as error:
             code = _extract_status_code(error)
             if code in (429, 404, 500, 502, 503, 504) and not last_combo:
                 yield event("status", content="Usage limit reached, trying another model...")
+                await _pub("status", "Usage limit reached, trying another model...")
                 continue
             gemini_failed_error = error
             break
@@ -1003,12 +1067,13 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
         may_fallback = code in FALLBACK_CODES or _looks_like_quota_error(gemini_failed_error)
         if chosen_provider == "auto" and may_fallback and _secondary_configured():
             fallback_label = "Groq" if GROQ_API_KEY else "DeepSeek"
-            yield event(
-                "status",
-                content=f"Gemini no disponible, cambiando a {fallback_label}..."
+            fallback_msg = (
+                f"Gemini no disponible, cambiando a {fallback_label}..."
                 if lang == "es"
-                else f"Gemini unavailable, switching to {fallback_label}...",
+                else f"Gemini unavailable, switching to {fallback_label}..."
             )
+            yield event("status", content=fallback_msg)
+            await _pub("status", fallback_msg)
             async for chunk in run_groq_stream(
                 user_message=user_message,
                 lang=lang,
@@ -1023,7 +1088,9 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
             ):
                 yield chunk
             return
-        yield event("error", content=gemini_error_message(gemini_failed_error, lang))
+        err_msg = gemini_error_message(gemini_failed_error, lang)
+        yield event("error", content=err_msg)
+        await _pub("error", err_msg)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1032,7 +1099,7 @@ async def serve_index():
 
 
 @app.post("/api/generate")
-async def generate_interface(body: GenerateRequest):
+async def generate_interface(body: GenerateRequest, request: Request):
     provider = (body.provider or LLM_PROVIDER or "auto").strip().lower()
     if provider not in {"gemini", "groq", "deepseek", "auto"}:
         provider = "auto"
@@ -1057,9 +1124,11 @@ async def generate_interface(body: GenerateRequest):
 
     dataset_text = load_dataset_context(body.dataset_id) if body.dataset_id else None
     images = [img.model_dump() for img in (body.images or [])]
+    auth = request.headers.get("authorization", "")
+    notify_token = auth[7:] if auth.lower().startswith("bearer ") else ""
     return StreamingResponse(run_agent_stream(body.message, body.lang, body.context, dataset_text,
                                               body.style_prompt, body.model, body.temperature, body.mode,
-                                              images, body.provider),
+                                              images, body.provider, notify_token=notify_token or None),
                              media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
@@ -1160,6 +1229,28 @@ async def auth_avatar(body: AvatarBody, request: Request):
     raise HTTPException(status_code=401, detail="Not signed in.")
 
 
+class PasswordBody(BaseModel):
+    current: str = Field(min_length=4, max_length=100)
+    new: str = Field(min_length=4, max_length=100)
+
+
+@app.put("/api/auth/password")
+async def auth_password(body: PasswordBody, request: Request):
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.lower().startswith("bearer ") else ""
+    users = _load_users()
+    for record in users.values():
+        if token and token in record.get("sessions", []):
+            if record.get("hash") != _hash_password(body.current, record.get("salt", "")):
+                raise HTTPException(status_code=401, detail="Current password is incorrect.")
+            salt = uuid.uuid4().hex
+            record["salt"] = salt
+            record["hash"] = _hash_password(body.new, salt)
+            _save_users(users)
+            return {"ok": True, "user": record["user"]}
+    raise HTTPException(status_code=401, detail="Not signed in.")
+
+
 @app.post("/api/auth/logout")
 async def auth_logout(body: dict):
     token = str(body.get("token", ""))
@@ -1170,6 +1261,298 @@ async def auth_logout(body: dict):
             sessions.remove(token)
     _save_users(users)
     return {"ok": True}
+
+
+# ─── Live channel: WS ticks, threshold alerts, agent progress, prefs sync ─────
+LIVE_TICK_SECONDS = 15
+LIVE_MAX_SYMBOLS = 20
+LIVE_MAX_WATCHES = 20
+
+
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _record_by_token(token: str) -> tuple[str | None, dict | None]:
+    if not token:
+        return None, None
+    for key, record in _load_users().items():
+        if token in record.get("sessions", []):
+            return key, record
+    return None, None
+
+
+def _clean_symbol(value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    sym = re.sub(r"[^A-Za-z0-9.\-=]", "", value.strip().upper())[:12]
+    return sym or None
+
+
+def _clean_number(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number <= 0 or number != number or number == float("inf"):
+        return None
+    return number
+
+
+class LiveManager:
+    """Tracks /ws/live connections; pushes ticks, alerts, agent progress, prefs."""
+
+    def __init__(self):
+        self.conns: dict[str, dict] = {}
+        self._ticker_task = None
+        self.last_agent: dict[str, dict] = {}
+
+    async def connect(self, ws: WebSocket, token: str) -> str:
+        await ws.accept()
+        key, _ = _record_by_token(token or "")
+        conn_id = uuid.uuid4().hex[:12]
+        self.conns[conn_id] = {
+            "ws": ws, "token": token or "", "user": ("user:" + key) if key else None,
+            "symbols": set(), "watches": {}, "last": {},
+        }
+        self._ensure_ticker()
+        hello: dict = {"type": "hello", "conn": conn_id, "live": MCP_ENABLED,
+                       "models": GEMINI_MODELS, "tick_seconds": LIVE_TICK_SECONDS}
+        if token and token in self.last_agent:
+            hello["agent"] = self.last_agent[token]
+        await self._send(conn_id, hello)
+        return conn_id
+
+    async def disconnect(self, conn_id: str) -> None:
+        self.conns.pop(conn_id, None)
+
+    async def _send(self, conn_id: str, msg: dict) -> None:
+        conn = self.conns.get(conn_id)
+        if not conn:
+            return
+        try:
+            await conn["ws"].send_json(msg)
+        except Exception:
+            pass
+
+    async def handle(self, conn_id: str, msg) -> None:
+        conn = self.conns.get(conn_id)
+        if not conn or not isinstance(msg, dict):
+            return
+        op = msg.get("op")
+        if op == "ping":
+            await self._send(conn_id, {"type": "pong", "ts": _utcnow()})
+        elif op == "subscribe":
+            symbols = []
+            for raw in (msg.get("symbols") or [])[:LIVE_MAX_SYMBOLS]:
+                sym = _clean_symbol(raw)
+                if sym and sym not in symbols:
+                    symbols.append(sym)
+            watches = {}
+            raw_watches = msg.get("watches") or {}
+            if isinstance(raw_watches, dict):
+                for raw_sym, cond in list(raw_watches.items())[:LIVE_MAX_WATCHES]:
+                    sym = _clean_symbol(raw_sym)
+                    if not sym or not isinstance(cond, dict):
+                        continue
+                    above = _clean_number(cond.get("above"))
+                    below = _clean_number(cond.get("below"))
+                    if above is None and below is None:
+                        continue
+                    watches[sym] = {"above": above, "below": below}
+                    if sym not in symbols and len(symbols) < LIVE_MAX_SYMBOLS:
+                        symbols.append(sym)
+            conn["symbols"] = set(symbols)
+            conn["watches"] = watches
+            await self._send(conn_id, {"type": "subscribed", "symbols": sorted(symbols)})
+        elif op == "unsubscribe":
+            conn["symbols"] = set()
+            conn["watches"] = {}
+            await self._send(conn_id, {"type": "subscribed", "symbols": []})
+
+    async def notify_agent(self, token: str, kind: str, text: str) -> None:
+        if not token:
+            return
+        self.last_agent[token] = {"kind": kind, "text": text, "ts": _utcnow()}
+        if len(self.last_agent) > 500:
+            self.last_agent.pop(next(iter(self.last_agent)))
+        for cid, conn in list(self.conns.items()):
+            if conn["token"] == token:
+                await self._send(cid, {"type": "agent", "kind": kind, "text": text})
+
+    async def notify_sync(self, user_key: str | None, prefs: dict, exclude: str | None = None) -> None:
+        if not user_key:
+            return
+        for cid, conn in list(self.conns.items()):
+            if conn["user"] == user_key and cid != exclude:
+                await self._send(cid, {"type": "sync", "prefs": prefs})
+
+    async def _resolve_quote_tool(self) -> str | None:
+        try:
+            tools = await mcp_client.list_tools()
+        except Exception:
+            return None
+        names = {tool.name for tool in tools}
+        if "get_live_quote" in names:
+            return "get_live_quote"
+        if "get_stock_quote" in names:
+            return "get_stock_quote"
+        return None
+
+    async def poll_once(self) -> None:
+        symbols: set[str] = set()
+        for conn in self.conns.values():
+            symbols |= conn["symbols"]
+        if not symbols or not MCP_ENABLED:
+            return
+        tool = await self._resolve_quote_tool()
+        if not tool:
+            for cid in list(self.conns):
+                await self._send(cid, {"type": "status", "code": "no_quote_tool"})
+            return
+        for sym in sorted(symbols):
+            try:
+                data = await mcp_client.call_tool(tool, {"symbol": sym})
+            except Exception:
+                continue
+            if not isinstance(data, dict):
+                continue
+            price = _clean_number(data.get("price"))
+            if price is None:
+                continue
+            try:
+                change = float(data.get("change_percent") or 0)
+            except (TypeError, ValueError):
+                change = 0
+            tick = {"type": "tick", "symbol": sym, "price": price,
+                    "change_percent": change, "ts": _utcnow()}
+            for cid, conn in list(self.conns.items()):
+                if sym not in conn["symbols"]:
+                    continue
+                await self._send(cid, tick)
+                watch = conn["watches"].get(sym, {})
+                prev = conn["last"].get(sym)
+                above = watch.get("above")
+                below = watch.get("below")
+                if prev is not None:
+                    if above is not None and prev < above <= price:
+                        await self._send(cid, {"type": "alert", "symbol": sym, "price": price,
+                                               "condition": "above", "threshold": above, "ts": tick["ts"]})
+                    elif below is not None and prev > below >= price:
+                        await self._send(cid, {"type": "alert", "symbol": sym, "price": price,
+                                               "condition": "below", "threshold": below, "ts": tick["ts"]})
+                conn["last"][sym] = price
+
+    def _ensure_ticker(self) -> None:
+        if self._ticker_task is None or self._ticker_task.done():
+            self._ticker_task = asyncio.create_task(self._ticker_loop())
+
+    async def _ticker_loop(self) -> None:
+        while self.conns:
+            try:
+                await self.poll_once()
+            except Exception:
+                pass
+            await asyncio.sleep(LIVE_TICK_SECONDS)
+
+
+live = LiveManager()
+
+
+@app.websocket("/ws/live")
+async def ws_live(ws: WebSocket):
+    token = ws.query_params.get("token", "")
+    conn_id = await live.connect(ws, token)
+    try:
+        while True:
+            await live.handle(conn_id, await ws.receive_json())
+    except WebSocketDisconnect:
+        await live.disconnect(conn_id)
+    except Exception:
+        await live.disconnect(conn_id)
+
+
+class WatchBody(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12, pattern=r"^[A-Za-z0-9.\-=]{1,12}$")
+    above: float | None = Field(default=None, gt=0)
+    below: float | None = Field(default=None, gt=0)
+
+
+class PrefsBody(BaseModel):
+    model: str | None = Field(default=None, max_length=80)
+    dataset_id: str | None = Field(default=None, max_length=60)
+    lang: str | None = Field(default=None, pattern="^(es|en)$")
+    watches: list[WatchBody] | None = Field(default=None, max_length=20)
+    via: str | None = Field(default=None, max_length=20)
+
+
+def _default_prefs() -> dict:
+    return {"model": "", "dataset_id": None, "lang": "es", "watches": []}
+
+
+def _sanitize_prefs(raw) -> dict:
+    prefs = _default_prefs()
+    if not isinstance(raw, dict):
+        return prefs
+    if isinstance(raw.get("model"), str) and raw["model"] in GEMINI_MODELS:
+        prefs["model"] = raw["model"]
+    if isinstance(raw.get("dataset_id"), str) and re.fullmatch(r"[a-zA-Z0-9_-]{1,60}", raw["dataset_id"]):
+        prefs["dataset_id"] = raw["dataset_id"]
+    if raw.get("lang") in ("es", "en"):
+        prefs["lang"] = raw["lang"]
+    watches = []
+    if isinstance(raw.get("watches"), list):
+        for item in raw["watches"][:LIVE_MAX_WATCHES]:
+            if not isinstance(item, dict):
+                continue
+            sym = _clean_symbol(item.get("symbol"))
+            above = _clean_number(item.get("above"))
+            below = _clean_number(item.get("below"))
+            if sym and (above is not None or below is not None):
+                watches.append({"symbol": sym, "above": above, "below": below})
+    prefs["watches"] = watches
+    return prefs
+
+
+@app.get("/api/prefs")
+async def get_prefs(request: Request):
+    if not _auth_record(request):
+        raise HTTPException(status_code=401, detail="Not signed in.")
+    _, record = _record_by_token(request.headers.get("authorization", "")[7:])
+    return _sanitize_prefs((record or {}).get("prefs"))
+
+
+@app.put("/api/prefs")
+async def put_prefs(body: PrefsBody, request: Request):
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.lower().startswith("bearer ") else ""
+    users = _load_users()
+    owner_key, record = None, None
+    for key, candidate in users.items():
+        if token and token in candidate.get("sessions", []):
+            owner_key, record = key, candidate
+            break
+    if record is None:
+        raise HTTPException(status_code=401, detail="Not signed in.")
+    if body.model is not None and body.model != "" and body.model not in GEMINI_MODELS:
+        raise HTTPException(status_code=422, detail="Unknown model.")
+    prefs = _sanitize_prefs(record.get("prefs"))
+    data = body.model_dump(exclude_unset=True)
+    if "model" in data:
+        prefs["model"] = data["model"] if data["model"] in GEMINI_MODELS else ""
+    if "dataset_id" in data:
+        dataset = data["dataset_id"]
+        prefs["dataset_id"] = dataset if isinstance(dataset, str) and re.fullmatch(
+            r"[a-zA-Z0-9_-]{1,60}", dataset) else None
+    if "lang" in data and data["lang"] in ("es", "en"):
+        prefs["lang"] = data["lang"]
+    if "watches" in data:
+        prefs["watches"] = _sanitize_prefs({"watches": [
+            item.model_dump() for item in (body.watches or [])]})["watches"]
+    record["prefs"] = prefs
+    _save_users(users)
+    await live.notify_sync("user:" + owner_key, prefs, exclude=data.get("via"))
+    return prefs
 
 
 @app.get("/api/datasets")
@@ -1509,12 +1892,19 @@ async def health():
             "deepseek_configured": bool(DEEPSEEK_API_KEY), "deepseek_model": DEEPSEEK_MODEL,
             "secondary_configured": _secondary_configured(),
             "secondary_provider": "groq" if GROQ_API_KEY else ("deepseek" if DEEPSEEK_API_KEY else None),
-            "mcp_enabled": MCP_ENABLED,
+            "mcp_enabled": MCP_ENABLED, "ws_live": True, "tick_seconds": LIVE_TICK_SECONDS,
+            "socketio_enabled": SOCKETIO_AVAILABLE, "mongodb_enabled": _mongodb_enabled(),
             "mcp_server": "finflow-financial-tools", "protocol": "A2UI over MCP"}
 
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
+# Socket.io comparte el mismo servidor ASGI: mismo puerto, sin proceso extra.
+if SOCKETIO_AVAILABLE:
+    socket_app = _socketio.ASGIApp(_sio, other_asgi_app=app)
+else:
+    socket_app = app
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("main:socket_app", host="127.0.0.1", port=8000, reload=True)

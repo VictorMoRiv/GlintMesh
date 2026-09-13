@@ -10,7 +10,7 @@
   <!-- Bootstrap Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
   <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Victor+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <!-- Highlight.js -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
 
@@ -119,10 +119,11 @@
       height: 100%;
       overflow: hidden;
       font-family: 'Inter', system-ui, sans-serif;
-      background: var(--gradient-bg);
+      background: #060a1e;
       color: var(--text-primary);
       -webkit-font-smoothing: antialiased;
     }
+    body { background: var(--gradient-bg); }
 
     /* Triple orbs + noise for deeper glass */
     body::before, body::after { content:''; position: fixed; border-radius:50%; pointer-events:none; z-index:0; filter: blur(90px); opacity:var(--orb-op); animation: orbFloat 22s ease-in-out infinite alternate; }
@@ -141,7 +142,7 @@
       border-bottom:1px solid var(--glass-border); box-shadow: var(--glass-highlight); gap:14px;
     }
     .logo-mark { width:38px; height:38px; background:var(--gradient-main); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:19px; font-weight:800; color:#fff; flex-shrink:0; box-shadow:0 0 24px var(--glow-cyan), inset 0 1px 0 rgba(255,255,255,0.35); }
-    .logo-text { font-size:26px; font-weight:700; font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; letter-spacing:-0.3px; line-height:1; white-space:nowrap; }
+    .logo-text { font-size:26px; font-weight:700; font-family:'Victor Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--gradient-main); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; letter-spacing:-0.3px; line-height:1; white-space:nowrap; }
     .logo-sub { font-size:10.5px; font-weight:600; color:var(--text-secondary); letter-spacing:0.8px; text-transform:uppercase; }
     .version-pill { font-size:11px; font-weight:600; color:var(--text-secondary); background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:20px; padding:5px 12px; backdrop-filter:blur(10px); display:flex; align-items:center; gap:6px; white-space:nowrap; box-shadow:var(--glass-highlight); }
     .version-pill i { color:var(--accent-cyan); font-size:12px; }
@@ -165,15 +166,28 @@
     #status-text.active { color:var(--accent-cyan); } #status-text.error { color:var(--accent-red); } #status-text.success { color:var(--accent-green); }
     #tool-feed { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
     #tool-feed::-webkit-scrollbar { width:4px; } #tool-feed::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.14); border-radius:4px; }
-    .tool-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-sm); padding:10px 12px; font-size:12px; animation:slideInLeft .3s ease; transition:var(--transition); backdrop-filter:blur(var(--blur-soft)); box-shadow:var(--glass-highlight); }
-    .tool-card:hover { background:var(--glass-bg-hover); border-color:var(--glass-border-strong); }
     @keyframes slideInLeft { from{opacity:0; transform:translateX(-12px);} to{opacity:1; transform:none;} }
-    .tool-card .tool-name { font-weight:600; color:var(--accent-cyan); display:flex; align-items:center; gap:6px; margin-bottom:4px; }
-    .tool-card .tool-data { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-secondary); word-break:break-all; line-height:1.5; }
+    @keyframes spin { from{transform:rotate(0);} to{transform:rotate(360deg);} }
+    .tool-status-icon { width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; flex-shrink:0; }
+    .tool-status-icon.calling { background:transparent; border:2px solid var(--tint-cyan-bd); border-top-color:var(--accent-cyan); animation:spin 0.9s linear infinite; }
+    .tool-status-icon.done { background:var(--tint-ok-bg); color:var(--accent-green); border:1px solid var(--ok-mid-bd); }
+    .tool-status-icon.error { background:var(--tint-err-bg); color:var(--accent-red); border:1px solid var(--err-bd); }
+    .tool-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-left:2px solid var(--accent-amber); border-radius:var(--radius-sm); padding:10px 12px; font-size:12px; animation:slideInLeft .3s ease; transition:var(--transition); backdrop-filter:blur(var(--blur-soft)); box-shadow:var(--glass-highlight); }
+    .tool-card:hover { background:var(--glass-bg-hover); border-color:var(--glass-border-strong); transform:translateX(2px); box-shadow:var(--glass-highlight), 0 0 18px var(--glow-cyan-faint); }
+    .tool-card.st-done { border-left-color:var(--ok-color); }
+    .tool-card.st-error { border-left-color:var(--err-color); }
+    .tool-card.st-calling { border-left-color:var(--accent-amber); animation:slideInLeft .3s ease, cardPulse 1.8s ease-in-out infinite; }
+    @keyframes cardPulse { 0%,100%{box-shadow:var(--glass-highlight);} 50%{box-shadow:var(--glass-highlight), 0 0 16px var(--glow-cyan-faint);} }
+    .tool-card .tool-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .tool-card .tool-name { font-weight:600; color:var(--text-primary); font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .tool-card .tool-time { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted); flex-shrink:0; }
+    .tool-card .tool-data { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-secondary); word-break:break-all; line-height:1.5; background:var(--pre-bg); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; }
+    .tool-card .tool-data.pending { display:flex; align-items:center; gap:8px; background:linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%); background-size:200% 100%; animation:shimmer 1.4s ease-in-out infinite; border-style:dashed; }
+    .tool-empty { text-align:center; padding:28px 16px; color:var(--text-muted); font-size:12px; line-height:1.6; border:1px dashed var(--glass-border-strong); border-radius:var(--radius-md); background:rgba(255,255,255,0.02); }
+    .tool-empty .te-icon { width:40px; height:40px; margin:0 auto 10px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--accent-cyan); background:var(--tint-cyan-bg); border:1px solid var(--tint-cyan-bd); }
+    .tool-empty strong { display:block; font-size:12.5px; color:var(--text-secondary); margin-bottom:4px; }
     .proto-badge { font-size:9px; font-weight:700; letter-spacing:0.6px; padding:2px 6px; border-radius:6px; background:var(--tint-cyan-bg); border:1px solid var(--tint-cyan-bd); color:var(--accent-cyan); }
     .proto-badge.mcp { background:var(--tint-purple-bg); border-color:var(--tint-purple-bd); color:var(--accent-purple); }
-    .tool-status-icon { width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; flex-shrink:0; }
-    .tool-status-icon.calling { background:var(--tint-warn-bg); color:var(--accent-amber); } .tool-status-icon.done { background:var(--tint-ok-bg); color:var(--accent-green); } .tool-status-icon.error { background:var(--tint-err-bg); color:var(--accent-red); }
     #prompt-suggestions { padding:12px; border-top:1px solid var(--glass-border); display:flex; flex-direction:column; gap:6px; max-height:46%; overflow-y:auto; }
     .suggestion-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); margin-bottom:2px; }
     .suggestion-label-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -183,10 +197,17 @@
     .prompt-row { display:flex; align-items:center; gap:4px; }
     .prompt-row .suggestion-chip { flex:1; min-width:0; }
     .prompt-row .suggestion-chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .prompt-act { width:22px; height:22px; padding:0; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid transparent; border-radius:6px; color:var(--text-muted); font-size:11px; cursor:pointer; opacity:.45; transition:var(--transition); flex-shrink:0; }
-    .prompt-row:hover .prompt-act, .prompt-act.pinned { opacity:1; }
+    .prompt-menu-wrap { position:relative; flex-shrink:0; }
+    .prompt-act { width:24px; height:24px; padding:0; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid transparent; border-radius:6px; color:var(--text-muted); font-size:13px; cursor:pointer; opacity:.55; transition:var(--transition); }
+    .prompt-row:hover .prompt-act { opacity:1; }
     .prompt-act:hover { background:var(--glass-bg-hover); border-color:var(--glass-border-strong); color:var(--text-primary); }
-    .prompt-act.pinned { color:var(--ok-color); }
+    .prompt-menu { display:none; position:absolute; right:0; top:calc(100% + 4px); z-index:40; flex-direction:column; gap:2px; min-width:130px; background:var(--modal-bg); border:1px solid var(--glass-border-strong); border-radius:10px; padding:4px; box-shadow:var(--shadow-card), var(--glass-highlight); }
+    .prompt-menu.open { display:flex; }
+    .prompt-menu-item { display:flex; align-items:center; gap:8px; width:100%; padding:6px 10px; font-size:12px; color:var(--text-secondary); background:transparent; border:none; border-radius:7px; cursor:pointer; text-align:left; }
+    .prompt-menu-item:hover { background:var(--glass-bg-hover); color:var(--text-primary); }
+    .prompt-menu-item.pm-pin.on { color:var(--ok-color); }
+    .prompt-menu-item.pm-del { color:var(--err-color); }
+    .prompt-menu-item.pm-del:hover { background:var(--err-tint-bg); }
     .suggestion-chip { background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 12px; font-size:12px; color:var(--text-secondary); cursor:pointer; transition:var(--transition); display:flex; align-items:center; gap:8px; text-align:left; backdrop-filter:blur(8px); }
     .suggestion-chip:hover { background:var(--tint-blue-hover-bg); border-color:var(--tint-blue-hover-bd); color:var(--text-primary); transform:translateX(2px); }
     .suggestion-chip i { color:var(--accent-cyan); flex-shrink:0; font-size:13px; }
@@ -194,9 +215,11 @@
     /* ─── Content ─── */
     #content-area { flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); backdrop-filter:blur(var(--blur-amount)) saturate(160%); box-shadow:var(--glass-highlight), var(--shadow-card); }
     #tab-bar { display:flex; align-items:center; padding:0 16px; border-bottom:1px solid var(--glass-border); height:48px; gap:4px; flex-shrink:0; }
-    .tab-btn { padding:7px 16px; border-radius:8px; font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:var(--transition); background:transparent; border:none; display:flex; align-items:center; gap:6px; }
+    .tab-btn { padding:7px 10px; border-radius:8px; font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:var(--transition); background:transparent; border:none; display:flex; align-items:center; gap:0; white-space:nowrap; }
+    .tab-btn .tab-label { max-width:0; opacity:0; overflow:hidden; margin-left:0; transition:max-width .25s ease, opacity .2s ease, margin-left .25s ease; }
+    .tab-btn:hover .tab-label, .tab-btn.active .tab-label { max-width:130px; opacity:1; margin-left:6px; }
     .tab-btn:hover { color:var(--text-primary); background:rgba(255,255,255,0.06); } .tab-btn.active { color:var(--accent-cyan); background:var(--tint-cyan-active-bg); border:1px solid var(--tint-cyan-active-bd); }
-    .tab-btn .tab-badge { background:var(--tint-blue-badge-bg); color:var(--accent-blue); font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px; }
+    .tab-btn .tab-badge { background:var(--tint-blue-badge-bg); color:var(--accent-blue); font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px; margin-left:6px; }
     #panel-container { flex:1; overflow:hidden; position:relative; }
     .panel { position:absolute; inset:0; display:none; } .panel.active { display:flex; flex-direction:column; }
     #panel-preview, #panel-a2ui { padding:20px; overflow-y:auto; }
@@ -222,7 +245,7 @@
     #preview-iframe { width:100%; border:none; background:#fff; min-height:500px; display:block; }
 
     /* A2UI cards */
-    .a2ui-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-left:3px solid var(--accent-cyan); border-radius:var(--radius-md); padding:14px 16px; backdrop-filter:blur(12px); box-shadow:var(--glass-highlight); animation:fadeInUp .35s ease; }
+    .a2ui-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-left:3px solid var(--accent-cyan); border-radius:var(--radius-md); padding:14px 16px; backdrop-filter:blur(12px); box-shadow:var(--glass-highlight); animation:fadeInUp .55s ease both; }
     .a2ui-card .a2ui-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:12.5px; font-weight:700; }
     .a2ui-card pre { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-secondary); background:var(--pre-bg); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; margin:0; max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
 
@@ -232,7 +255,7 @@
     #code-output.streaming { border-color:var(--tint-cyan-focus-bd); box-shadow:0 0 20px var(--glow-cyan-stream); }
 
     /* Chat input */
-    #chat-input-area { padding:14px 16px 10px; border-top:1px solid var(--glass-border); flex-shrink:0; background:var(--input-area-bg); backdrop-filter:blur(16px); }
+    #chat-input-area { padding:14px 16px 10px; border-top:1px solid var(--glass-border); flex-shrink:0; background:var(--input-area-bg); backdrop-filter:blur(16px); position:relative; }
     #input-wrapper { display:flex; gap:10px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:10px 14px; transition:var(--transition); box-shadow:var(--glass-highlight); backdrop-filter:blur(12px); }
     #input-wrapper:focus-within { border-color:var(--tint-cyan-focus-bd); box-shadow:0 0 0 3px var(--tint-cyan-focus-bs); }
     #chat-textarea { flex:1; background:transparent; border:none; outline:none; color:var(--text-primary); font-family:'Inter',sans-serif; font-size:14px; resize:none; min-height:22px; max-height:120px; line-height:1.5; caret-color:var(--accent-cyan); }
@@ -265,6 +288,52 @@
     .toast-item { background:var(--toast-bg); backdrop-filter:blur(16px); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:12px 16px; font-size:13px; color:var(--text-primary); display:flex; align-items:center; gap:10px; animation:toastIn .3s ease; min-width:240px; max-width:340px; box-shadow:var(--shadow-card); }
     .toast-item.success{border-color:var(--ok-mid-bd);} .toast-item.error{border-color:var(--err-bd);} .toast-item.info{border-color:var(--info-bd);}
     @keyframes toastIn { from{opacity:0; transform:translateY(20px) scale(.95);} to{opacity:1; transform:none;} }
+
+    /* ─── Motion pack (sutil; se desactiva con body.no-anim o "Animaciones" en Configuración) ─── */
+    @keyframes shimmer { from{background-position:200% 0;} to{background-position:-200% 0;} }
+    @keyframes popIn { from{opacity:0; transform:translateY(8px) scale(.97);} to{opacity:1; transform:none;} }
+    @keyframes pulseGlow { 0%,100%{box-shadow:0 4px 14px var(--glow-cyan-soft);} 50%{box-shadow:0 4px 22px var(--glow-cyan);} }
+    @keyframes gradShift { from{background-position:0% 50%;} to{background-position:100% 50%;} }
+    @keyframes tickFlash { 0%{background-color:var(--tint-cyan-bg);} 100%{background-color:transparent;} }
+    @keyframes livePulse { 0%,100%{box-shadow:0 0 0 0 var(--ok-dot-glow);} 50%{box-shadow:0 0 0 5px transparent;} }
+    /* Los modales están centrados con translate(-50%,-50%): la animación lo conserva
+       para que no salten al abrir; easing de resorte suave para una apertura fluida */
+    @keyframes modalIn { from{opacity:0; transform:translate(-50%,-47%) scale(.95);} to{opacity:1; transform:translate(-50%,-50%) scale(1);} }
+    @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+    .skeleton { border-radius:8px; background:linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.04) 75%); background-size:200% 100%; animation:shimmer 1.4s ease-in-out infinite; }
+    .welcome-title { background-size:200% auto; animation:gradShift 7s ease-in-out infinite alternate; }
+    .welcome-features .feature-card { animation:fadeInUp .55s ease both; }
+    .welcome-features .feature-card:nth-child(2) { animation-delay:.1s; }
+    .welcome-features .feature-card:nth-child(3) { animation-delay:.2s; }
+    #a2ui-feed .a2ui-card:nth-child(2) { animation-delay:.08s; }
+    #a2ui-feed .a2ui-card:nth-child(3) { animation-delay:.16s; }
+    #a2ui-feed .a2ui-card:nth-child(4) { animation-delay:.24s; }
+    #a2ui-feed .a2ui-card:nth-child(n+5) { animation-delay:.32s; }
+    #tool-feed .tool-card:nth-child(2) { animation-delay:.05s; }
+    #tool-feed .tool-card:nth-child(3) { animation-delay:.1s; }
+    #tool-feed .tool-card:nth-child(n+4) { animation-delay:.15s; }
+    #prompt-list .prompt-row { animation:fadeInUp .45s ease both; }
+    #prompt-list .prompt-row:nth-child(2) { animation-delay:.05s; }
+    #prompt-list .prompt-row:nth-child(3) { animation-delay:.1s; }
+    #prompt-list .prompt-row:nth-child(4) { animation-delay:.15s; }
+    #prompt-list .prompt-row:nth-child(n+5) { animation-delay:.2s; }
+    .btn-glass:active { transform:scale(.95); }
+    #model-btn:hover { border-color:var(--tint-cyan-focus-bd); box-shadow:0 0 12px var(--glow-cyan-stream); }
+    .a2ui-price.tick-flash { animation:tickFlash .9s ease; border-radius:6px; }
+    #live-dot.on { background:var(--ok-color); animation:livePulse 2s ease-in-out infinite; }
+    #live-dot.alert { background:var(--warn-color); animation:livePulse 1s ease-in-out infinite; }
+    #live-pill:hover { border-color:var(--glass-border-strong); background:var(--glass-bg-hover); }
+    .toast-item.warn { border-color:var(--warn-bd); }
+    #model-popover { animation:popIn .18s ease; transform-origin:bottom left; }
+    #prompt-modal, #auth-modal, #data-modal, #style-modal, #settings-modal, #wipe-modal { animation:modalIn .34s cubic-bezier(.22,1,.36,1) both; }
+    #style-overlay { animation:fadeIn .25s ease both; }
+    #send-btn:disabled { animation:pulseGlow 1.6s ease-in-out infinite; }
+    .tab-btn.active { transition:var(--transition); }
+    .panel.active { animation:fadeInUp .25s ease; }
+    body.no-anim *, body.no-anim *::before, body.no-anim *::after { animation:none !important; transition:none !important; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation:none !important; transition:none !important; }
+    }
     * { scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.14) transparent; }
     @media (max-width: 860px) { :root{--sidebar-width:0px;} #sidebar{display:none;} #main-body{padding:8px;} .welcome-features{grid-template-columns:1fr;} }
   </style>
@@ -294,18 +363,67 @@
     .a2ui-riskbar { height:8px; border-radius:6px; background:var(--riskbar-bg); overflow:hidden; }
     .a2ui-riskbar div { height:100%; border-radius:6px; background:var(--gradient-ok); }
     .a2ui-factors { margin:0; padding-left:18px; font-size:12px; color:var(--text-secondary); display:flex; flex-direction:column; gap:4px; }
-    .a2ui-canvas-wrap { position:relative; height:220px; }
-    .a2ui-canvas-wrap canvas { width:100% !important; height:100% !important; }
+    .a2ui-canvas-wrap { position:relative; height:240px; overflow:hidden; }
+    .a2ui-canvas-wrap canvas { width:100% !important; height:100% !important; display:block; }
+    .a2ui-body { min-width:0; }
+    .a2ui-body .a2ui-table { display:block; overflow-x:auto; }
     .a2ui-raw { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-secondary);
 background:var(--pre-bg); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; margin:0;
 max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
     .proto-badge.live { background:var(--ok-tint-bg); border-color:var(--ok-bd); color:var(--ok-color); }
+    /* ─── Socket.io status + A2UI realtime animations ─── */
+    .socket-status { position:fixed; bottom:12px; left:12px; z-index:9998; display:flex; align-items:center; gap:6px; font-size:10px; font-weight:600; color:var(--text-secondary); background:var(--toast-bg); border:1px solid var(--glass-border); border-radius:16px; padding:4px 10px; backdrop-filter:blur(12px); }
+    .socket-dot { width:6px; height:6px; border-radius:50%; background:var(--accent-red); transition:background 0.3s; }
+    .socket-dot.connected { background:var(--accent-green); box-shadow:0 0 8px var(--ok-dot-glow); animation:socketConnect 0.4s ease; }
+    .data-flow-bar { height:3px; background:linear-gradient(90deg, transparent, var(--accent-cyan), var(--accent-purple), transparent); background-size:200% 100%; animation:dataFlow 2s linear infinite; border-radius:2px; margin:8px 0; }
+    .price-flash { animation:priceFlash 0.8s ease; }
+    @keyframes socketConnect { from { transform:scale(0.8); opacity:0; } to { transform:scale(1); opacity:1; } }
+    @keyframes a2uiSlideIn { from { opacity:0; transform:translateY(20px) scale(0.96); } to { opacity:1; transform:translateY(0) scale(1); } }
+    @keyframes a2uiGlow { 0% { box-shadow:0 0 0 0 var(--glow-cyan); } 50% { box-shadow:0 0 24px 4px var(--glow-cyan); } 100% { box-shadow:0 0 0 0 var(--glow-cyan); } }
+    @keyframes a2uiPulse { 0%, 100% { transform:scale(1); } 50% { transform:scale(1.02); } }
+    @keyframes a2uiShake { 0%, 100% { transform:translateX(0); } 20% { transform:translateX(-4px); } 40% { transform:translateX(4px); } 60% { transform:translateX(-3px); } 80% { transform:translateX(3px); } }
+    @keyframes a2uiCelebrate { 0% { transform:scale(1); } 25% { transform:scale(1.03) rotate(-1deg); } 50% { transform:scale(1.05) rotate(1deg); } 75% { transform:scale(1.03) rotate(-0.5deg); } 100% { transform:scale(1) rotate(0); } }
+    @keyframes a2uiFadeIn { from { opacity:0; } to { opacity:1; } }
+    @keyframes priceFlash { 0% { background:transparent; } 50% { background:rgba(0,212,255,0.15); } 100% { background:transparent; } }
+    @keyframes dataFlow { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
+    .a2ui-animate-slide { animation:a2uiSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) both; }
+    .a2ui-animate-glow { animation:a2uiGlow 1.2s ease-in-out; }
+    .a2ui-animate-pulse { animation:a2uiPulse 0.6s ease-in-out; }
+    .a2ui-animate-shake { animation:a2uiShake 0.5s ease-in-out; }
+    .a2ui-animate-celebrate { animation:a2uiCelebrate 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+    .a2ui-animate-fadein { animation:a2uiFadeIn 0.4s ease; }
   </style>
   <style id="theme-css"></style>
   <style id="user-css"></style>
+  <script>
+  /* Pre-pinta el tema guardado antes del primer paint: evita el flash del tema base al recargar.
+     app.js refresca este snapshot en cada applyTheme(). Sin snapshot, no hace nada. */
+  (function () {
+    try {
+      var cache = JSON.parse(localStorage.getItem('glintmesh-theme-cache-v1') || 'null');
+      if (!cache) return;
+      var root = document.documentElement;
+      var vars = cache.vars || {};
+      for (var k in vars) {
+        if (Object.prototype.hasOwnProperty.call(vars, k) && vars[k] !== '' && vars[k] != null) {
+          root.style.setProperty(k, vars[k]);
+        }
+      }
+      if (cache.css) document.getElementById('theme-css').textContent = cache.css;
+      var ui = null;
+      try { ui = JSON.parse(localStorage.getItem('glintmesh-ui-v3') || 'null'); } catch (e) {}
+      if (ui && ui.css) document.getElementById('user-css').textContent = String(ui.css).slice(0, 3000);
+      if (localStorage.getItem('glintmesh-anim-v1') === 'off') {
+        var st = document.createElement('style');
+        st.textContent = '*,*::before,*::after{animation:none!important;transition:none!important}';
+        document.head.appendChild(st);
+      }
+    } catch (e) {}
+  })();
+  </script>
 </head>
 
-<body data-theme="red-white">
+<body data-theme="red">
 <div id="bg-orb-3"></div>
 <div id="bg-noise"></div>
 <div id="app-shell">
@@ -316,7 +434,7 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
       <button class="btn-glass" id="btn-auth" title="Sign in">
         <span id="auth-avatar" style="display:none; width:22px; height:22px; border-radius:50%; overflow:hidden; flex-shrink:0;"><img id="auth-avatar-img" style="width:100%; height:100%; object-fit:cover;" /></span>
         <i class="bi bi-person-circle" id="auth-icon"></i>
-        <span id="auth-label" data-i18n="signin">Sign in</span>
+        <span id="auth-label">Sign in</span>
       </button>
       <div class="version-pill" title="A2UI over MCP">
         <span id="version-label">GlintMesh &bull; v2</span>
@@ -343,8 +461,9 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
       </div>
 
       <div id="tool-feed">
-        <div style="text-align:center; padding:24px 16px; color:var(--text-muted); font-size:12px; line-height:1.6;">
-          <i class="bi bi-diagram-3" style="font-size:24px; display:block; margin-bottom:10px;"></i>
+        <div class="tool-empty">
+          <div class="te-icon"><i class="bi bi-diagram-3"></i></div>
+          <strong data-i18n="tool_empty_title">Sin actividad aún</strong>
           <span data-i18n="tool_empty">MCP tool calls will appear here as the agent works</span>
         </div>
       </div>
@@ -358,10 +477,11 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
 
     <main id="content-area">
       <div id="tab-bar">
-        <button class="tab-btn active" data-tab="preview"><i class="bi bi-display"></i><span data-i18n="preview">Preview</span></button>
-        <button class="tab-btn" data-tab="a2ui"><i class="bi bi-grid-1x2"></i><span data-i18n="a2ui">A2UI Surface</span><span class="tab-badge" id="a2ui-badge" style="display:none;">0</span></button>
-        <button class="tab-btn" data-tab="code"><i class="bi bi-code-slash"></i><span data-i18n="code">Code</span><span class="tab-badge" id="code-badge" style="display:none;">HTML</span></button>
-        <div class="ms-auto d-flex align-items-center gap-2">
+        <button class="tab-btn" id="btn-clear-top" title="Clear" style="margin-left:auto;"><i class="bi bi-arrow-counterclockwise"></i><span class="tab-label" data-i18n="clear">Limpiar</span></button>
+        <button class="tab-btn active" data-tab="preview"><i class="bi bi-display"></i><span class="tab-label" data-i18n="preview">Vista</span></button>
+        <button class="tab-btn" data-tab="a2ui"><i class="bi bi-grid-1x2"></i><span class="tab-label" data-i18n="a2ui">A2UI</span><span class="tab-badge" id="a2ui-badge" style="display:none;">0</span></button>
+        <button class="tab-btn" data-tab="code"><i class="bi bi-code-slash"></i><span class="tab-label" data-i18n="code">Code</span><span class="tab-badge" id="code-badge" style="display:none;">HTML</span></button>
+        <div class="d-flex align-items-center gap-2">
           <button class="btn-glass btn-sm" id="btn-print-pdf" type="button"><i class="bi bi-file-earmark-pdf"></i> <span data-i18n="print_pdf">PDF / Print</span></button>
           <div id="progress-bar-container" style="display:none; align-items:center; gap:8px;">
             <div class="thinking-dots"><span></span><span></span><span></span></div>
@@ -399,7 +519,7 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
 
           <div id="generated-wrapper">
             <div class="agent-message-bubble" id="user-bubble" style="display:none; border-color:var(--tint-blue-hover-bd);">
-              <div class="agent-avatar" style="background:var(--gradient-main);"><i class="bi bi-person-fill" style="color:#fff; font-size:12px;"></i></div>
+              <div class="agent-avatar" id="user-bubble-avatar" style="background:var(--gradient-main); overflow:hidden;"><i class="bi bi-person-fill" style="color:#fff; font-size:12px;"></i></div>
               <div style="flex:1;"><div id="user-bubble-text" style="color:var(--text-primary);"></div><div id="user-bubble-imgs" style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;"></div></div>
             </div>
             <div class="agent-message-bubble" id="agent-bubble" style="display:none;">
@@ -421,13 +541,24 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         </div>
 
         <div class="panel" id="panel-a2ui">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; position:relative;">
             <button class="btn-glass btn-sm" id="btn-refresh-data"><i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh_data">Refresh data</span></button>
             <button class="btn-glass btn-sm" id="btn-compose"><i class="bi bi-grid-1x2-fill"></i> <span data-i18n="compose">Compose dashboard</span></button>
+            <button class="btn-glass btn-sm" id="btn-watches"><i class="bi bi-bell"></i> <span data-i18n="watches">Alertas</span><span id="watch-count" style="display:none; background:var(--tint-warn-bg); color:var(--warn-color); font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></button>
             <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); cursor:pointer;">
               <input type="checkbox" id="auto-refresh" style="accent-color:var(--ok-color);" /> <span data-i18n="auto_60">Auto 60s</span>
             </label>
             <span id="refresh-note" style="font-size:11px; color:var(--text-muted);"></span>
+            <div id="watch-popover" style="display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:60; width:min(300px,90vw); background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:12px; padding:12px; box-shadow:var(--shadow-card); animation:popIn .18s ease;">
+              <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.7px; color:var(--text-muted); margin-bottom:8px;" data-i18n="watches">Alertas</div>
+              <div style="display:flex; gap:6px; margin-bottom:8px;">
+                <input id="watch-sym" maxlength="12" placeholder="AAPL" style="flex:1; min-width:0; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 9px; font-size:12px; color:var(--text-primary); outline:none; text-transform:uppercase;" />
+                <input id="watch-above" type="number" min="0" step="any" data-i18n-ph="watch_above_ph" placeholder="↑ 200" style="width:76px; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 9px; font-size:12px; color:var(--text-primary); outline:none;" />
+                <input id="watch-below" type="number" min="0" step="any" data-i18n-ph="watch_below_ph" placeholder="↓ 100" style="width:76px; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 9px; font-size:12px; color:var(--text-primary); outline:none;" />
+                <button class="btn-glass btn-sm" id="watch-add" title="Add"><i class="bi bi-plus-lg"></i></button>
+              </div>
+              <div id="watch-list" style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto;"></div>
+            </div>
           </div>
           <div id="a2ui-feed" style="display:flex; flex-direction:column; gap:12px; padding:4px;">
             <div id="a2ui-empty" style="text-align:center; padding:60px 20px; color:var(--text-muted); font-size:13px;">
@@ -459,14 +590,20 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         </div>
         <div id="img-strip" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:12px; padding:8px;"></div>
         <div id="input-wrapper">
+          <button id="style-btn" type="button" title="Interface style" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-brush"></i></button>
+          <button id="model-btn" type="button" title="Model" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; color:var(--text-secondary); cursor:pointer; font-size:12px; align-self:flex-end; padding:6px 8px; display:flex; align-items:center; gap:6px; max-width:170px;"><i class="bi bi-cpu" style="font-size:14px; color:var(--accent-cyan);"></i><span id="model-btn-label" style="font-size:11px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">default</span><i class="bi bi-chevron-up" style="font-size:10px;"></i></button>
+          <textarea id="chat-textarea" rows="1" maxlength="500" data-i18n-ph="placeholder" placeholder="Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'"></textarea>
           <button id="mic-btn" type="button" title="Voice input" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-mic"></i></button>
           <button id="img-btn" type="button" title="Attach chart images (financial charts only)" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:17px; align-self:flex-end; padding:6px;"><i class="bi bi-image"></i></button>
-          <textarea id="chat-textarea" rows="1" maxlength="500" data-i18n-ph="placeholder" placeholder="Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'"></textarea>
           <button id="send-btn" title="Generate interface"><i class="bi bi-arrow-up"></i></button>
         </div>
         <input type="file" id="img-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none;" />
+        <div id="model-popover" style="display:none; position:absolute; bottom:calc(100% - 8px); left:16px; z-index:60; min-width:250px; max-width:320px; background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:12px; padding:8px; box-shadow:var(--shadow-card);">
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.7px; color:var(--text-muted); padding:4px 8px 6px;" data-i18n="model_label">Modelo</div>
+          <div id="model-list" style="display:flex; flex-direction:column; gap:4px; max-height:220px; overflow-y:auto;"></div>
+        </div>
         <div id="input-footer">
-          <span data-i18n="disclaimer">GlintMesh may produce simulated financial data for demonstration purposes</span>
+          <span data-i18n="disclaimer">GlintMesh puede cometer errores. Verifica la información importante.</span>
           <span id="char-count">0 / 500</span>
         </div>
       </div>
@@ -502,14 +639,37 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
   <div id="data-list" style="display:flex; flex-direction:column; gap:8px;"></div>
 </div>
 
+<!-- Interface style modal -->
+<div id="style-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9300;"></div>
+<div id="style-modal" style="display:none; position:fixed; z-index:9301; top:50%; left:50%; transform:translate(-50%,-50%); width:min(540px,94vw); max-height:84vh; overflow-y:auto; background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-brush" style="color:var(--ok-color);"></i> <span data-i18n="style_title">Interface style</span></h5>
+    <button class="btn-glass" id="btn-close-style" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="style_sub">Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).</p>
+  <div id="style-presets" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+    <button class="btn-glass btn-sm" data-preset="minimalist"><span data-i18n="s_min">Minimalist enterprise</span></button>
+    <button class="btn-glass btn-sm" data-preset="glass"><span data-i18n="s_glass">Glassmorphism</span></button>
+    <button class="btn-glass btn-sm" data-preset="dark"><span data-i18n="s_dark">Simple dark</span></button>
+    <button class="btn-glass btn-sm" data-preset="corporate"><span data-i18n="s_corp">Classic corporate</span></button>
+    <button class="btn-glass btn-sm" data-preset="custom"><span data-i18n="s_custom">Custom</span></button>
+  </div>
+  <textarea id="style-textarea" rows="5" maxlength="1000" data-i18n-ph="style_ph" placeholder="E.g.: dark mode with green accents and big numbers..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
+  <div style="display:flex; align-items:center; gap:8px; margin-top:10px;">
+    <span id="style-count" style="font-size:11px; color:var(--text-muted);">0 / 1000</span>
+    <span style="flex:1;"></span>
+    <button class="btn-glass" id="btn-style-reset"><span data-i18n="reset_default">Reset</span></button>
+    <button class="btn-glass" id="btn-style-save" style="border-color:var(--ok-mid-bd); color:var(--ok-color);"><i class="bi bi-check"></i> <span data-i18n="save">Save</span></button>
+  </div>
+</div>
+
 <!-- Settings modal -->
 <div id="settings-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
 <div id="settings-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(520px,94vw); max-height:84vh; overflow-y:auto; background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
   <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-gear" style="color:var(--ok-color);"></i> <span data-i18n="style_title">Interface style</span></h5>
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-gear" style="color:var(--ok-color);"></i> <span data-i18n="settings">Configuración</span></h5>
     <button class="btn-glass" id="btn-close-settings" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
   </div>
-  <p style="font-size:12px; color:var(--text-secondary); margin:0 0 12px;" data-i18n="style_sub">Describe how you want all your interfaces to look. Empty means minimalist enterprise (default).</p>
   <div style="margin-bottom:14px;">
     <div style="font-size:12px; font-weight:700; margin-bottom:8px;" data-i18n="options_menu">Options</div>
     <div class="lang-toggle" role="group" aria-label="Language" style="margin-bottom:8px;">
@@ -518,29 +678,10 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
     </div>
     <div style="display:flex; gap:6px;">
       <button class="btn-glass" id="btn-tools" style="flex:1;" title="View connected MCP tools"><i class="bi bi-tools"></i> <span data-i18n="tools">Tools</span></button>
-      <button class="btn-glass" id="btn-clear" style="flex:1;" title="Clear current session"><i class="bi bi-arrow-counterclockwise"></i> <span data-i18n="clear">Clear</span></button>
     </div>
-  </div>
-  <div id="style-presets" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
-    <button class="btn-glass btn-sm" data-preset="minimalist"><span data-i18n="s_min">Minimalist enterprise</span></button>
-    <button class="btn-glass btn-sm" data-preset="glass"><span data-i18n="s_glass">Glassmorphism</span></button>
-    <button class="btn-glass btn-sm" data-preset="dark"><span data-i18n="s_dark">Simple dark</span></button>
-    <button class="btn-glass btn-sm" data-preset="corporate"><span data-i18n="s_corp">Classic corporate</span></button>
-    <button class="btn-glass btn-sm" data-preset="custom"><span data-i18n="s_custom">Custom</span></button>
-  </div>
-  <textarea id="style-textarea" rows="4" maxlength="1000" data-i18n-ph="style_ph" placeholder="E.g.: dark mode with green accents and big numbers..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
-  <div style="display:flex; align-items:center; gap:8px; margin-top:10px;">
-    <span id="style-count" style="font-size:11px; color:var(--text-muted);">0 / 1000</span>
-    <span style="flex:1;"></span>
-    <button class="btn-glass" id="btn-style-reset"><span data-i18n="reset_default">Reset</span></button>
-    <button class="btn-glass" id="btn-style-save" style="border-color:var(--ok-mid-bd); color:var(--ok-color);"><i class="bi bi-check"></i> <span data-i18n="save">Save</span></button>
   </div>
   <hr style="border-color:var(--glass-border); margin:16px 0;" />
   <div style="display:flex; flex-direction:column; gap:10px;">
-    <div style="display:flex; align-items:center; gap:10px;">
-      <span style="font-size:12px; font-weight:600; min-width:110px;" data-i18n="model_label">Model</span>
-      <select id="gen-model" style="flex:1; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--text-primary); outline:none;"></select>
-    </div>
     <div style="display:flex; align-items:center; gap:10px;">
       <span style="font-size:12px; font-weight:600; min-width:110px;" data-i18n="creativity">Creativity</span>
       <input type="range" id="gen-temp" min="0" max="100" value="70" style="flex:1; accent-color:var(--ok-color);" />
@@ -562,14 +703,13 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
     </div>
     <div id="theme-grid" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
     <div role="group" aria-label="Dark / light" style="display:flex; gap:6px; margin-bottom:10px;">
+      <button class="btn-glass btn-sm" id="ui-auto" style="flex:1;"><span data-i18n="ui_auto">Auto</span></button>
       <button class="btn-glass btn-sm" id="ui-dark" style="flex:1;"><span data-i18n="ui_dark">Dark</span></button>
       <button class="btn-glass btn-sm" id="ui-light" style="flex:1;"><span data-i18n="ui_light">Light</span></button>
     </div>
-    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
-      <button class="btn-glass btn-sm" data-snip="blue"><span data-i18n="snip_blue">Blue header</span></button>
-      <button class="btn-glass btn-sm" data-snip="round"><span data-i18n="snip_round">All rounded</span></button>
-      <button class="btn-glass btn-sm" data-snip="compact"><span data-i18n="snip_compact">Compact</span></button>
-    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary); cursor:pointer; margin-bottom:10px;">
+      <input type="checkbox" id="ui-anim" checked style="accent-color:var(--ok-color);" /> <span data-i18n="anim">Animaciones</span>
+    </label>
     <textarea id="user-css-textarea" rows="3" maxlength="3000" data-i18n-ph="css_ph" placeholder="Un solo prompt de diseño: pega un snippet o escribe tu CSS..." style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:10px 12px; font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-primary); resize:vertical; outline:none;"></textarea>
     <div style="font-size:11px; color:var(--text-muted); margin-top:6px;" data-i18n="css_hint">Applies live to this app only. Never affects generated interfaces.</div>
   </div>
@@ -598,14 +738,24 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
 
 <div id="toast-container"></div>
 
+<!-- Socket.io status indicator -->
+<div class="socket-status" id="socket-status">
+  <div class="socket-dot" id="socket-dot"></div>
+  <span id="socket-label">Realtime</span>
+</div>
+
 <!-- Auth modal -->
 <div id="auth-overlay" style="display:none; position:fixed; inset:0; background:rgba(3,6,18,0.6); backdrop-filter:blur(4px); z-index:9000;"></div>
 <div id="auth-modal" style="display:none; position:fixed; z-index:9001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(400px,92vw); background:var(--modal-bg); backdrop-filter:blur(24px); border:1px solid var(--glass-border-strong); border-radius:14px; padding:20px;">
   <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-person-circle" style="color:var(--ok-color);"></i> <span data-i18n="signin_title">Sign in</span></h5>
+    <h5 style="margin:0; font-size:15px; font-weight:700;"><i class="bi bi-person-circle" style="color:var(--ok-color);"></i> <span id="auth-title">Sign in</span></h5>
     <button class="btn-glass" id="btn-close-auth" style="margin-left:auto;"><i class="bi bi-x-lg"></i></button>
   </div>
-  <div style="display:flex; flex-direction:column; gap:8px;">
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <div id="auth-tabs" class="lang-toggle" role="tablist" aria-label="Account" style="margin-bottom:2px;">
+      <button id="auth-tab-login" class="active" type="button" style="flex:1;"><span data-i18n="signin">Sign in</span></button>
+      <button id="auth-tab-register" type="button" style="flex:1;"><span data-i18n="signup">Register</span></button>
+    </div>
     <div id="auth-profile" style="display:none; align-items:center; gap:12px; background:var(--ok-soft-bg); border:1px solid var(--ok-soft-bd); border-radius:10px; padding:10px 12px;">
       <span style="position:relative; width:48px; height:48px; border-radius:50%; overflow:hidden; background:rgba(255,255,255,0.06); flex-shrink:0; display:flex; align-items:center; justify-content:center;">
         <img id="auth-profile-img" style="display:none; width:100%; height:100%; object-fit:cover;" />
@@ -615,18 +765,46 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
         <div id="auth-profile-name" style="font-size:14px; font-weight:700; overflow:hidden; text-overflow:ellipsis;"></div>
         <div style="font-size:11px; color:var(--text-secondary);" data-i18n="session_saved">Session saved while signed in</div>
       </div>
-      <button class="btn-glass btn-sm" id="btn-avatar-pick" type="button"><i class="bi bi-camera"></i></button>
+      <button class="btn-glass btn-sm" id="btn-avatar-pick" type="button" title="Photo"><i class="bi bi-camera"></i></button>
+    </div>
+    <div id="auth-pw-form" style="display:none; flex-direction:column; gap:8px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:10px; padding:10px 12px;">
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <label style="font-size:11px; font-weight:600; color:var(--text-secondary);" data-i18n="f_current">Clave actual</label>
+        <input id="pw-current" type="password" maxlength="100" autocomplete="current-password" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <label style="font-size:11px; font-weight:600; color:var(--text-secondary);" data-i18n="f_new">Nueva contraseña</label>
+        <input id="pw-new" type="password" maxlength="100" autocomplete="new-password" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+      </div>
+      <div id="pw-note" style="font-size:11px; color:var(--text-muted);"></div>
+      <button class="btn-glass" id="btn-pw-save" type="button" style="border-color:var(--ok-mid-bd); color:var(--ok-color);"><span data-i18n="save">Save</span></button>
+    </div>
+    <div id="auth-logged-actions" style="display:none; gap:8px;">
+      <button class="btn-glass btn-sm" id="btn-pw-toggle" type="button" style="flex:1;"><i class="bi bi-key"></i> <span data-i18n="pw_change">Cambiar clave</span></button>
+      <button class="btn-glass btn-sm" id="btn-logout" type="button" style="flex:1; border-color:var(--err-bd); color:var(--err-color);"><i class="bi bi-box-arrow-right"></i> <span data-i18n="logout">Salir</span></button>
     </div>
     <div id="auth-guest-note" style="font-size:11px; color:var(--accent-amber);" data-i18n="guest_note">Guest mode: your info is lost when you leave the chat. Sign in to keep it.</div>
-    <input id="auth-user" maxlength="30" placeholder="user" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
-    <input id="auth-pass" type="password" maxlength="100" placeholder="password" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+    <div id="auth-field-user" style="display:flex; flex-direction:column; gap:4px;">
+      <label style="font-size:11px; font-weight:600; color:var(--text-secondary);" data-i18n="f_user">Usuario</label>
+      <input id="auth-user" maxlength="30" autocomplete="username" data-i18n-ph="f_user_ph" placeholder="tu_usuario" style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+    </div>
+    <div id="auth-field-pass" style="display:flex; flex-direction:column; gap:4px;">
+      <label style="font-size:11px; font-weight:600; color:var(--text-secondary);" data-i18n="f_pass">Contraseña</label>
+      <div style="position:relative;">
+        <input id="auth-pass" type="password" maxlength="100" autocomplete="current-password" data-i18n-ph="f_pass_ph" placeholder="••••••" style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 36px 8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+        <button class="pw-eye" type="button" data-for="auth-pass" title="Show" style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:15px; padding:4px 6px;"><i class="bi bi-eye"></i></button>
+      </div>
+    </div>
+    <div id="auth-confirm-row" style="display:none; flex-direction:column; gap:4px;">
+      <label style="font-size:11px; font-weight:600; color:var(--text-secondary);" data-i18n="f_confirm">Confirmar contraseña</label>
+      <div style="position:relative;">
+        <input id="auth-confirm" type="password" maxlength="100" autocomplete="new-password" data-i18n-ph="f_confirm_ph" placeholder="••••••" style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:8px; padding:8px 36px 8px 10px; font-size:13px; color:var(--text-primary); outline:none;" />
+        <button class="pw-eye" type="button" data-for="auth-confirm" title="Show" style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:15px; padding:4px 6px;"><i class="bi bi-eye"></i></button>
+      </div>
+    </div>
     <input type="file" id="auth-avatar-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" />
     <div id="auth-note" style="font-size:11px; color:var(--text-muted);">Local account. Optional for demo.</div>
-    <div style="display:flex; gap:8px;">
-      <button class="btn-glass" id="btn-login" style="flex:1; border-color:var(--ok-mid-bd); color:var(--ok-color);"><span data-i18n="signin">Sign in</span></button>
-      <button class="btn-glass" id="btn-register" style="flex:1;"><span data-i18n="signup">Register</span></button>
-      <button class="btn-glass" id="btn-logout" style="flex:1; display:none; border-color:var(--err-bd); color:var(--err-color);"><span>Out</span></button>
-    </div>
+    <button class="btn-glass" id="btn-auth-submit" type="button" style="width:100%; justify-content:center; border-color:var(--ok-mid-bd); color:var(--ok-color); font-weight:600;"><span id="auth-submit-label">Sign in</span></button>
   </div>
 </div>
 
@@ -656,6 +834,93 @@ max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script type="module" src="/static/app.js?v=10"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  // ─── Socket.io client + A2UI realtime animations ─────────────────────────
+  // Guardado: si el CDN está bloqueado o el servidor no expone Socket.io,
+  // la app sigue funcionando (SSE + /ws/live + polling normal).
+  (function initSocketIO() {
+    if (typeof window.io !== 'function') return;
+    let socket;
+    try {
+      socket = window.io({ transports: ['websocket', 'polling'] });
+    } catch (e) { return; }
+    const socketDot = document.getElementById('socket-dot');
+    const socketLabel = document.getElementById('socket-label');
+    socket.on('connect', () => {
+      if (socketDot) socketDot.classList.add('connected');
+      if (socketLabel) socketLabel.textContent = 'Live';
+      try { socket.emit('join_room', { room: 'a2ui_updates' }); } catch (e) {}
+    });
+    socket.on('disconnect', () => {
+      if (socketDot) socketDot.classList.remove('connected');
+      if (socketLabel) socketLabel.textContent = 'Offline';
+    });
+    socket.on('tool_call', (data) => {
+      animateSocketEvent('glow');
+      const feed = document.getElementById('tool-feed');
+      if (feed && data && data.tool && !document.getElementById('flow-' + data.tool)) {
+        const flowBar = document.createElement('div');
+        flowBar.className = 'data-flow-bar';
+        flowBar.id = 'flow-' + data.tool;
+        feed.appendChild(flowBar);
+      }
+    });
+    socket.on('tool_result', (data) => {
+      const flowBar = data && data.tool && document.getElementById('flow-' + data.tool);
+      if (flowBar) flowBar.remove();
+      animateSocketEvent(data && data.failed ? 'shake' : 'celebrate');
+    });
+    socket.on('generation_start', () => animateSocketEvent('pulse'));
+    socket.on('a2ui_update', (data) => animateA2UICards((data && data.animation) || 'slideIn'));
+    socket.on('price_update', (data) => { if (data && data.symbol) flashPriceElement(data.symbol); });
+    socket.on('generation_complete', () => { animateSocketEvent('celebrate'); celebrateA2UI(); });
+    socket.on('generation_error', () => animateSocketEvent('shake'));
+    socket.on('data_refresh', () => animateA2UICards('fadeIn'));
+    function animateSocketEvent(type) {
+      document.querySelectorAll('.a2ui-card').forEach((card, i) => {
+        setTimeout(() => {
+          card.classList.remove('a2ui-animate-slide', 'a2ui-animate-glow', 'a2ui-animate-pulse', 'a2ui-animate-shake', 'a2ui-animate-celebrate');
+          void card.offsetWidth;
+          card.classList.add('a2ui-animate-' + type);
+        }, i * 80);
+      });
+    }
+    function animateA2UICards(animType) {
+      const cls = 'a2ui-animate-' + String(animType || 'slideIn').toLowerCase();
+      document.querySelectorAll('.a2ui-card').forEach((card, i) => {
+        setTimeout(() => {
+          card.classList.remove('a2ui-animate-slide', 'a2ui-animate-glow', 'a2ui-animate-fadein');
+          void card.offsetWidth;
+          card.classList.add(cls);
+        }, i * 100);
+      });
+    }
+    function flashPriceElement(symbol) {
+      document.querySelectorAll('.a2ui-sym').forEach((el) => {
+        if (el.textContent.trim() === symbol) {
+          const card = el.closest('.a2ui-card') || el.closest('.a2ui-metric');
+          if (card) {
+            card.classList.add('price-flash');
+            setTimeout(() => card.classList.remove('price-flash'), 800);
+          }
+        }
+      });
+    }
+    function celebrateA2UI() {
+      document.querySelectorAll('.a2ui-card').forEach((card, i) => {
+        setTimeout(() => {
+          card.classList.add('a2ui-animate-celebrate');
+          card.style.borderLeftColor = 'var(--accent-cyan)';
+          setTimeout(() => {
+            card.style.borderLeftColor = '';
+            card.classList.remove('a2ui-animate-celebrate');
+          }, 1000);
+        }, i * 150);
+      });
+    }
+  })();
+</script>
+<script type="module" src="/static/app.js?v=18"></script>
 </body>
 </html>

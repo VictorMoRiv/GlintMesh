@@ -431,6 +431,30 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(self.client.put("/api/auth/avatar", json={"avatar": tiny}).status_code, 401)
         self.assertEqual(self.client.put("/api/auth/avatar", json={"avatar": "not-a-data-url"}, headers=headers).status_code, 422)
 
+    def test_password_change(self):
+        self.client.post("/api/auth/register", json={"user": "bea", "password": "oldpass1"})
+        login = self.client.post("/api/auth/login", json={"user": "bea", "password": "oldpass1"}).json()
+        headers = {"Authorization": "Bearer " + login["token"]}
+        # wrong current password is rejected
+        bad = self.client.put("/api/auth/password", headers=headers,
+                              json={"current": "wrongpass", "new": "newpass2"})
+        self.assertEqual(bad.status_code, 401)
+        # too short is rejected by validation
+        short = self.client.put("/api/auth/password", headers=headers,
+                                json={"current": "oldpass1", "new": "abc"})
+        self.assertEqual(short.status_code, 422)
+        # guests cannot change passwords
+        self.assertEqual(self.client.put(
+            "/api/auth/password", json={"current": "oldpass1", "new": "newpass2"}).status_code, 401)
+        # happy path: old stops working, new works
+        ok = self.client.put("/api/auth/password", headers=headers,
+                             json={"current": "oldpass1", "new": "newpass2"})
+        self.assertEqual(ok.status_code, 200)
+        self.assertEqual(self.client.post(
+            "/api/auth/login", json={"user": "bea", "password": "oldpass1"}).status_code, 401)
+        retry = self.client.post("/api/auth/login", json={"user": "bea", "password": "newpass2"})
+        self.assertEqual(retry.status_code, 200)
+
     def test_passwords_are_hashed(self):
         self.client.post("/api/auth/register", json={"user": "ana", "password": "secret2"})
         stored = main._load_users()["ana"]

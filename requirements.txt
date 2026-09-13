@@ -8,3 +8,6 @@ pymongo>=4.10,<5
 # PDF directo (/api/pdf): HTML->PDF A4 sin JS ni navegador externo.
 fpdf2>=2.7,<3
 Pillow>=10,<12
+# Tiempo real Socket.io + persistencia MongoDB async (mongo_store, ambas con fallback).
+python-socketio>=5.11,<6
+motor>=3.6,<4

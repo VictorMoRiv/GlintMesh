@@ -1,12 +1,13 @@
 import { readSSE } from './sse.mjs';
 import { openPrintView } from './print.mjs';
+import { LiveSocket } from './live.js';
 
 // ─── i18n ─────────────────────────────────────────────────────────────────
 const I18N = {
   es: {
     subtitle: 'A2UI over MCP Interface Mesh', tools: 'Tools', clear: 'Limpiar', export: 'Exportar',
-    preview: 'Vista previa', a2ui: 'Superficie A2UI', code: 'Código', agent_status: 'Estado del agente',
-    ready: 'Listo para generar interfaces', tool_empty: 'Las llamadas MCP aparecerán aquí mientras trabaja el agente',
+    preview: 'Vista', a2ui: 'A2UI', code: 'Código', agent_status: 'Estado del agente',
+    ready: 'Listo para generar interfaces', tool_empty_title: 'Sin actividad aún', tool_calling: 'Consultando herramienta MCP…', tool_empty: 'Las llamadas MCP aparecerán aquí mientras trabaja el agente',
     quick_prompts: 'Prompts rápidos', add_prompt: 'Nuevo prompt rápido', edit_prompt: 'Editar prompt', prompt_need: 'Escribe al menos un texto (ES o EN)', p1: 'Dashboard de portafolio', p2: 'Monitor de índices', p3: 'Analizador de riesgo',
     p4: 'Calculadora de inversión', p5: 'Tablero forex', p6: 'Noticias financieras',
     welcome_desc: 'Describe cualquier dashboard financiero en lenguaje natural. GlintMesh obtiene datos MCP y los renderiza como superficies A2UI en segundos.',
@@ -14,7 +15,7 @@ const I18N = {
     f3d: 'Herramientas demo activadas (datos simulados)', f3d_off: 'MCP desactivado; Gemini genera con datos de ejemplo',
     welcome_hint: 'Escribe abajo o elige un prompt rápido del sidebar',
     a2ui_empty: 'Las superficies A2UI de las llamadas MCP se renderizarán aquí',
-    generated_html: 'HTML generado', copy: 'Copiar', disclaimer: 'GlintMesh puede producir datos financieros simulados con fines demostrativos',
+    generated_html: 'HTML generado', copy: 'Copiar', disclaimer: 'GlintMesh puede cometer errores. Verifica la información importante.',
     placeholder: "Describe una interfaz financiera... ej. 'Dashboard de portafolio en tiempo real'",
     drawer_title: 'MCPs conectados', drawer_sub: 'Servidores y herramientas disponibles para el agente',
     data: 'Datos', datasets_title: 'Mis datasets', datasets_sub: 'Sube CSV o JSON (máx 2 MB). El agente construye la interfaz con tus datos.',
@@ -27,10 +28,10 @@ const I18N = {
     s_min: 'Minimalista empresarial', s_glass: 'Glassmorphism', s_dark: 'Oscuro simple', s_corp: 'Corporativo clásico', s_custom: 'Personalizado', style_saved: 'Estilo guardado',
     model_label: 'Modelo', creativity: 'Creatividad', mode_label: 'Modo', mode_full: 'Interfaz completa', mode_data: 'Solo datos',
     data_mgmt: 'Datos guardados', saved_session: 'Sesión guardada', session_empty: 'Sin sesión guardada', delete: 'Borrar',
-    app_look: 'Apariencia de la app', ui_dark: 'Oscuro', ui_light: 'Claro',
+    app_look: 'Apariencia de la app', ui_auto: 'Automático', ui_dark: 'Oscuro', ui_light: 'Claro', anim: 'Animaciones',
     css_ph: 'Un solo prompt de diseño: pega un snippet o escribe tu CSS...',
     css_hint: 'Se aplica en vivo solo a esta app. Nunca afecta las interfaces generadas.',
-    reset_look: 'Restablecer apariencia', snip_blue: 'Header azul', snip_round: 'Todo redondeado', snip_compact: 'Compacto',
+    reset_look: 'Restablecer apariencia',
     del_all: 'Borrar todo', keep_imp: 'Conservar importantes', del_everything: 'Borrar todo', cancel: 'Cancelar',
     wipe_title: '¿Borrar datos guardados?', wipe_will_delete: 'Se borrará:', w_session: 'sesión', w_datasets: 'datasets', w_prefs: 'preferencias',
     imp_tag: 'importante', wiped_ok: 'Datos eliminados',
@@ -43,8 +44,8 @@ const I18N = {
   },
   en: {
     subtitle: 'A2UI over MCP Interface Mesh', tools: 'Tools', clear: 'Clear', export: 'Export',
-    preview: 'Preview', a2ui: 'A2UI Surface', code: 'Code', agent_status: 'Agent Status',
-    ready: 'Ready to generate interfaces', tool_empty: 'MCP tool calls will appear here as the agent works',
+    preview: 'Preview', a2ui: 'A2UI', code: 'Code', agent_status: 'Agent Status',
+    ready: 'Ready to generate interfaces', tool_empty_title: 'No activity yet', tool_calling: 'Calling MCP tool…', tool_empty: 'MCP tool calls will appear here as the agent works',
     quick_prompts: 'Quick Prompts', add_prompt: 'New quick prompt', edit_prompt: 'Edit prompt', prompt_need: 'Type at least one text (ES or EN)', p1: 'Portfolio dashboard', p2: 'Market indices monitor', p3: 'Credit risk analyzer',
     p4: 'Investment calculator', p5: 'Forex rates board', p6: 'Financial news feed',
     welcome_desc: 'Describe any financial dashboard in plain language. GlintMesh fetches MCP data and renders it as A2UI surfaces in seconds.',
@@ -52,7 +53,7 @@ const I18N = {
     f3d: 'Demo tools enabled (simulated data)', f3d_off: 'MCP disabled; Gemini generates with sample data',
     welcome_hint: 'Type a request below or choose a quick prompt from the sidebar',
     a2ui_empty: 'A2UI surfaces from MCP tool calls will render here',
-    generated_html: 'Generated HTML', copy: 'Copy', disclaimer: 'GlintMesh may produce simulated financial data for demonstration purposes',
+    generated_html: 'Generated HTML', copy: 'Copy', disclaimer: 'GlintMesh can make mistakes. Verify important information.',
     placeholder: "Describe a financial interface... e.g. 'Build me a real-time stock portfolio dashboard'",
     drawer_title: 'Connected MCPs', drawer_sub: 'Servers and tools available to the agent',
     data: 'Data', datasets_title: 'My datasets', datasets_sub: 'Upload CSV or JSON (max 2 MB). The agent builds the interface from your data.',
@@ -65,10 +66,10 @@ const I18N = {
     s_min: 'Minimalist enterprise', s_glass: 'Glassmorphism', s_dark: 'Simple dark', s_corp: 'Classic corporate', s_custom: 'Custom', style_saved: 'Style saved',
     model_label: 'Model', creativity: 'Creativity', mode_label: 'Mode', mode_full: 'Full interface', mode_data: 'Data only',
     data_mgmt: 'Saved data', saved_session: 'Saved session', session_empty: 'No saved session', delete: 'Delete',
-    app_look: 'App appearance', ui_dark: 'Dark', ui_light: 'Light',
+    app_look: 'App appearance', ui_auto: 'Auto', ui_dark: 'Dark', ui_light: 'Light', anim: 'Animations',
     css_ph: 'One design prompt: paste a snippet or write your CSS...',
     css_hint: 'Applies live to this app only. Never affects generated interfaces.',
-    reset_look: 'Reset look', snip_blue: 'Blue header', snip_round: 'All rounded', snip_compact: 'Compact',
+    reset_look: 'Reset look',
     del_all: 'Delete all', keep_imp: 'Keep important', del_everything: 'Delete everything', cancel: 'Cancel',
     wipe_title: 'Delete saved data?', wipe_will_delete: 'Will delete:', w_session: 'session', w_datasets: 'datasets', w_prefs: 'preferences',
     imp_tag: 'important', wiped_ok: 'Data deleted',
@@ -82,8 +83,8 @@ const I18N = {
 };
 let lang = localStorage.getItem('glintmesh-lang') || 'es';
 if (!I18N[lang]) lang = 'es';
-Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', signin: 'Entrar', signup: 'Registro', signin_title: 'Iniciar sesión', session_saved: 'Sesión guardada mientras hay login', guest_note: 'Modo invitado: tu info se pierde al salir del chat. Inicia sesión para guardarla.', auth_short: 'Usuario 3+ letras y clave 4+ caracteres', auth_reg_fail: 'No se pudo registrar (¿usuario tomado?)', auth_enter_login: 'Registrado. Ahora pulsa Entrar', auth_empty: 'Escribe usuario y clave', auth_bad: 'Usuario o clave incorrectos', auth_login_fail: 'No se pudo entrar', auth_photo_ok: 'Foto actualizada', auth_photo_fail: 'No se pudo subir la foto (máx 300 KB)', auth_avatar_big: 'Foto muy pesada (máx 300 KB)', voice_on: 'Escuchando... habla ahora', voice_off: 'Voz no disponible en este navegador', voice_mic_denied: 'Permite el micrófono en el navegador y reintenta', voice_no_mic: 'No se encontró micrófono', voice_no_speech: 'No te escuché, habla más fuerte y reintenta', voice_network: 'Voz necesita internet (Chrome/Edge)', voice_lang: 'Idioma de voz no soportado', img_many: 'Máximo 3 imágenes', img_big: 'Imagen muy pesada (máx 1.5 MB)' });
-Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', signin: 'Sign in', signup: 'Register', signin_title: 'Sign in', session_saved: 'Session saved while signed in', guest_note: 'Guest mode: your info is lost when you leave the chat. Sign in to keep it.', auth_short: 'User 3+ chars and password 4+ chars', auth_reg_fail: 'Could not register (name taken?)', auth_enter_login: 'Registered. Now press Sign in', auth_empty: 'Type user and password', auth_bad: 'Wrong user or password', auth_login_fail: 'Could not sign in', auth_photo_ok: 'Photo updated', auth_photo_fail: 'Could not upload photo (max 300 KB)', auth_avatar_big: 'Photo too large (max 300 KB)', voice_on: 'Listening... speak now', voice_off: 'Voice not available in this browser', voice_mic_denied: 'Allow the microphone in the browser and retry', voice_no_mic: 'No microphone found', voice_no_speech: 'Did not hear you, speak up and retry', voice_network: 'Voice needs internet (Chrome/Edge)', voice_lang: 'Voice language not supported', img_many: 'Max 3 images', img_big: 'Image too large (max 1.5 MB)' });
+Object.assign(I18N.es, { retry: 'Reintentar', compose: 'Combinar', composed_ok: 'Dashboard combinado creado', need_2: 'Necesitas al menos 2 superficies A2UI para combinar', live: 'En vivo', offline: 'Sin conexión', watches: 'Alertas', watch_above_ph: '↑ precio', watch_below_ph: '↓ precio', no_watches: 'Sin alertas. Añade símbolo + umbral.', watch_need: 'Símbolo + al menos un umbral', alert_above: '{s} superó {v}', alert_below: '{s} cayó de {v}', signin: 'Entrar', signup: 'Registro', signin_title: 'Iniciar sesión', session_saved: 'Sesión guardada mientras hay login', guest_note: 'Modo invitado: tu info se pierde al salir del chat. Inicia sesión para guardarla.', auth_short: 'Usuario 3+ letras y clave 4+ caracteres', auth_taken: 'Ese usuario ya está tomado', pw_mismatch: 'Las contraseñas no coinciden', pw_bad_current: 'La clave actual no es correcta', pw_saved: 'Contraseña actualizada', auth_checking: 'Verificando…', auth_create: 'Crear cuenta', auth_reg_fail: 'No se pudo registrar (¿usuario tomado?)', auth_enter_login: 'Registrado. Ahora pulsa Entrar', auth_empty: 'Escribe usuario y clave', auth_bad: 'Usuario o clave incorrectos', auth_login_fail: 'No se pudo entrar', auth_photo_ok: 'Foto actualizada', auth_photo_fail: 'No se pudo subir la foto (máx 300 KB)', auth_avatar_big: 'Foto muy pesada (máx 300 KB)', f_user: 'Usuario', f_user_ph: 'tu_usuario', f_pass: 'Contraseña', f_pass_ph: 'Tu contraseña', f_confirm: 'Confirmar contraseña', f_confirm_ph: 'Repite tu contraseña', f_current: 'Clave actual', f_new: 'Nueva contraseña', pw_change: 'Cambiar clave', logout: 'Salir', voice_on: 'Escuchando... habla ahora', voice_off: 'Voz no disponible en este navegador', voice_mic_denied: 'Permite el micrófono en el navegador y reintenta', voice_no_mic: 'No se encontró micrófono', voice_no_speech: 'No te escuché, habla más fuerte y reintenta', voice_network: 'Voz necesita internet (Chrome/Edge)', voice_lang: 'Idioma de voz no soportado', img_many: 'Máximo 3 imágenes', img_big: 'Imagen muy pesada (máx 1.5 MB)' });
+Object.assign(I18N.en, { retry: 'Retry', compose: 'Compose dashboard', composed_ok: 'Composed dashboard created', need_2: 'Need at least 2 A2UI surfaces to compose', live: 'Live', offline: 'Offline', watches: 'Alerts', watch_above_ph: '↑ price', watch_below_ph: '↓ price', no_watches: 'No alerts. Add a symbol + threshold.', watch_need: 'Symbol + at least one threshold', alert_above: '{s} crossed above {v}', alert_below: '{s} fell below {v}', signin: 'Sign in', signup: 'Register', signin_title: 'Sign in', session_saved: 'Session saved while signed in', guest_note: 'Guest mode: your info is lost when you leave the chat. Sign in to keep it.', auth_short: 'User 3+ chars and password 4+ chars', auth_taken: 'That username is taken', pw_mismatch: 'Passwords do not match', pw_bad_current: 'Current password is incorrect', pw_saved: 'Password updated', auth_checking: 'Checking…', auth_create: 'Create account', auth_reg_fail: 'Could not register (name taken?)', auth_enter_login: 'Registered. Now press Sign in', auth_empty: 'Type user and password', auth_bad: 'Wrong user or password', auth_login_fail: 'Could not sign in', auth_photo_ok: 'Photo updated', auth_photo_fail: 'Could not upload photo (max 300 KB)', auth_avatar_big: 'Photo too large (max 300 KB)', f_user: 'Username', f_user_ph: 'your_username', f_pass: 'Password', f_pass_ph: 'Your password', f_confirm: 'Confirm password', f_confirm_ph: 'Repeat your password', f_current: 'Current password', f_new: 'New password', pw_change: 'Change password', logout: 'Sign out', voice_on: 'Listening... speak now', voice_off: 'Voice not available in this browser', voice_mic_denied: 'Allow the microphone in the browser and retry', voice_no_mic: 'No microphone found', voice_no_speech: 'Did not hear you, speak up and retry', voice_network: 'Voice needs internet (Chrome/Edge)', voice_lang: 'Voice language not supported', img_many: 'Max 3 images', img_big: 'Image too large (max 1.5 MB)' });
 const t = (k) => (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k;
 
 function applyLang(next) {
@@ -91,6 +92,9 @@ function applyLang(next) {
   localStorage.setItem('glintmesh-lang', lang);
   document.documentElement.lang = lang;
   document.querySelectorAll('[data-i18n]').forEach((el) => {
+    // #auth-label muestra el username cuando hay sesión; no sobrescribirlo aquí.
+    // refreshAuthLabel() es quien decide entre username y "Sign in"/"Entrar".
+    if (el.id === 'auth-label') return;
     const key = el.getAttribute('data-i18n');
     if (I18N[lang][key]) el.textContent = I18N[lang][key];
   });
@@ -99,6 +103,7 @@ function applyLang(next) {
   });
   document.getElementById('lang-es').classList.toggle('active', lang === 'es');
   document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+  if (typeof refreshAuthLabel === 'function') refreshAuthLabel();
 }
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -115,8 +120,10 @@ const chatTextarea = $('chat-textarea'), sendBtn = $('send-btn'), toolFeed = $('
   a2uiFeed = $('a2ui-feed'), a2uiBadge = $('a2ui-badge');
 
 document.querySelectorAll('.tab-btn').forEach((btn) => {
+  // botones sin data-tab (ej. Clear) tienen su propio handler; no cambian de panel
+  if (!btn.dataset.tab) return;
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-btn[data-tab]').forEach((b) => b.classList.remove('active'));
     document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
     btn.classList.add('active');
     $('panel-' + btn.dataset.tab).classList.add('active');
@@ -134,8 +141,8 @@ chatTextarea.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
 });
 sendBtn.addEventListener('click', handleSubmit);
-$('lang-es').addEventListener('click', () => { applyLang('es'); refreshConfigLabels(); });
-$('lang-en').addEventListener('click', () => { applyLang('en'); refreshConfigLabels(); });
+$('lang-es').addEventListener('click', () => { applyLang('es'); refreshConfigLabels(); if (!syncLock) { broadcastSync('lang', 'es'); pushPrefs(); } });
+$('lang-en').addEventListener('click', () => { applyLang('en'); refreshConfigLabels(); if (!syncLock) { broadcastSync('lang', 'en'); pushPrefs(); } });
 
 // ─── Quick prompts: editable, deletable, pinnable, addable ──────────────────
 const PROMPT_KEY = 'glintmesh-prompts-v1';
@@ -165,10 +172,16 @@ function renderPrompts() {
   list.innerHTML = sorted.map((p) => {
     const label = promptText(p);
     return '<div class="prompt-row" data-id="' + escapeHtml(p.id) + '">'
-      + '<button class="suggestion-chip" title="' + escapeHtml(label) + '"><i class="bi ' + escapeHtml(p.icon || 'bi-lightning-charge') + '"></i><span>' + escapeHtml(label) + '</span></button>'
-      + '<button class="prompt-act ' + (p.pinned ? 'pinned' : '') + '" data-act="pin" title="Pin / unpin">' + (p.pinned ? '<i class="bi bi-pin-angle-fill"></i>' : '<i class="bi bi-pin-angle"></i>') + '</button>'
-      + '<button class="prompt-act" data-act="edit" title="Edit"><i class="bi bi-pencil"></i></button>'
-      + '<button class="prompt-act" data-act="del" title="Delete"><i class="bi bi-x-lg"></i></button>'
+      + '<button class="suggestion-chip" title="' + escapeHtml(label) + '"' + (p.pinned ? ' style="border-color:var(--ok-soft-bd);"' : '') + '>'
+      + (p.pinned ? '<i class="bi bi-pin-angle-fill" style="color:var(--ok-color);"></i>' : '<i class="bi ' + escapeHtml(p.icon || 'bi-lightning-charge') + '"></i>')
+      + '<span>' + escapeHtml(label) + '</span></button>'
+      + '<div class="prompt-menu-wrap">'
+      + '<button class="prompt-act" data-act="more" title="More options"><i class="bi bi-three-dots-vertical"></i></button>'
+      + '<div class="prompt-menu">'
+      + '<button class="prompt-menu-item pm-pin' + (p.pinned ? ' on' : '') + '" data-act="pin"><i class="bi bi-pin-angle' + (p.pinned ? '-fill' : '') + '"></i>' + (p.pinned ? 'Unpin' : 'Pin') + '</button>'
+      + '<button class="prompt-menu-item" data-act="edit"><i class="bi bi-pencil"></i>Edit</button>'
+      + '<button class="prompt-menu-item pm-del" data-act="del"><i class="bi bi-x-lg"></i>Delete</button>'
+      + '</div></div>'
       + '</div>';
   }).join('');
 }
@@ -181,9 +194,11 @@ promptListEl.addEventListener('click', (e) => {
   const actBtn = e.target.closest('[data-act]');
   if (actBtn) {
     const act = actBtn.dataset.act;
+    if (act === 'more') { togglePromptMenu(row); return; }
     if (act === 'pin') p.pinned = !p.pinned;
     else if (act === 'del') prompts = prompts.filter((x) => x.id !== p.id);
-    else if (act === 'edit') { openPromptEditor(p); return; }
+    else if (act === 'edit') { closeAllPromptMenus(); openPromptEditor(p); return; }
+    closeAllPromptMenus();
     savePrompts();
     renderPrompts();
     return;
@@ -196,6 +211,18 @@ promptListEl.addEventListener('click', (e) => {
   handleSubmit();
 });
 let editingPromptId = null;
+function togglePromptMenu(row) {
+  const menu = row.querySelector('.prompt-menu');
+  const isOpen = menu && menu.classList.contains('open');
+  closeAllPromptMenus();
+  if (!isOpen && menu) menu.classList.add('open');
+}
+function closeAllPromptMenus() {
+  document.querySelectorAll('#prompt-list .prompt-menu.open').forEach((m) => m.classList.remove('open'));
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#prompt-list')) closeAllPromptMenus();
+});
 function openPromptEditor(p) {
   editingPromptId = p ? p.id : null;
   $('prompt-modal-title').textContent = p ? t('edit_prompt') : t('add_prompt');
@@ -230,7 +257,7 @@ $('btn-prompt-save').addEventListener('click', () => {
 });
 renderPrompts();
 
-$('btn-clear').addEventListener('click', () => {
+$('btn-clear-top').addEventListener('click', () => {
   state.controller?.abort(); state.controller = null; state.isGenerating = false; state.a2ui = [];
   destroyA2UICharts();
   sendBtn.disabled = false; progressBar.style.display = 'none'; previewIframe.srcdoc = '';
@@ -238,14 +265,15 @@ $('btn-clear').addEventListener('click', () => {
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
   const autoBox = $('auto-refresh');
   if (autoBox) autoBox.checked = false;
-  activeDataset = null; refreshDatasetChip();
+  activeDataset = null; datasetChanged();
   try { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
   welcomeState.style.display = 'flex'; generatedWrapper.classList.remove('visible');
   agentBubble.style.display = 'none'; previewContainer.style.display = 'none'; agentBubbleText.textContent = '';
   $('user-bubble').style.display = 'none'; $('user-bubble-text').textContent = ''; $('user-bubble-imgs').innerHTML = '';
   codeOutput.innerHTML = '<code style="color:var(--text-muted); font-size:12px;">// Generated code will appear here...</code>';
   codeBadge.style.display = 'none'; btnCopyCode.style.display = 'none'; a2uiBadge.style.display = 'none';
-  toolFeed.innerHTML = '<div style="text-align:center; padding:30px 16px; color:var(--text-muted); font-size:12px;">' + t('tool_empty') + '</div>';
+  toolFeed.innerHTML = '<div class="tool-empty"><div class="te-icon"><i class="bi bi-diagram-3"></i></div><strong>'
+    + escapeHtml(t('tool_empty_title')) + '</strong><span>' + escapeHtml(t('tool_empty')) + '</span></div>';
   a2uiFeed.innerHTML = '<div id="a2ui-empty" style="text-align:center; padding:60px 20px; color:var(--text-muted); font-size:13px;">' + t('a2ui_empty') + '</div>';
   setStatus(t('ready'), ''); chatTextarea.value = ''; charCount.textContent = '0 / 500';
   showToast(t('session_cleared'), 'info');
@@ -357,6 +385,8 @@ function persistSettings() {
 }
 function refreshSettingsDot() {
   $('settings-dot').style.display = (stylePrompt && stylePreset !== 'minimalist') ? 'block' : 'none';
+  const sb = $('style-btn');
+  if (sb) sb.style.color = (stylePrompt && stylePreset !== 'minimalist') ? 'var(--ok-color)' : 'var(--text-secondary)';
 }
 function syncSettingsUI() {
   const ta = $('style-textarea');
@@ -366,24 +396,83 @@ function syncSettingsUI() {
     b.style.borderColor = b.dataset.preset === stylePreset ? cv('--ok-active-bd') : '';
   });
   const sel = $('gen-model');
-  const geminiModels = (cachedHealth && cachedHealth.models) || [];
-  const groqModels = (cachedHealth && (cachedHealth.groq_models || (cachedHealth.groq_model ? [cachedHealth.groq_model] : []))) || [];
-  let optsHtml = '<option value="">default</option>';
-  if (geminiModels.length) {
-    optsHtml += '<optgroup label="Gemini">' + geminiModels.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') + '</optgroup>';
+  if (sel) {
+    const geminiModels = (cachedHealth && cachedHealth.models) || [];
+    const groqModels = (cachedHealth && (cachedHealth.groq_models || (cachedHealth.groq_model ? [cachedHealth.groq_model] : []))) || [];
+    let optsHtml = '<option value="">default</option>';
+    if (geminiModels.length) {
+      optsHtml += '<optgroup label="Gemini">' + geminiModels.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') + '</optgroup>';
+    }
+    if (groqModels.length) {
+      optsHtml += '<optgroup label="Groq (fallback)">' + groqModels.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') + '</optgroup>';
+    }
+    sel.innerHTML = optsHtml;
+    if (genModel && ![...sel.options].some((o) => o.value === genModel)) {
+      const opt = document.createElement('option'); opt.value = genModel; opt.textContent = genModel; opt.selected = true; sel.appendChild(opt);
+    }
   }
-  if (groqModels.length) {
-    optsHtml += '<optgroup label="Groq (fallback)">' + groqModels.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') + '</optgroup>';
-  }
-  sel.innerHTML = optsHtml;
-  if (genModel && ![...sel.options].some((o) => o.value === genModel)) {
-    const opt = document.createElement('option'); opt.value = genModel; opt.textContent = genModel; opt.selected = true; sel.appendChild(opt);
-  }
+  refreshModelButton();
   $('gen-temp').value = Math.round(genTemp * 100);
   $('gen-temp-val').textContent = Number(genTemp).toFixed(1);
   $('mode-full').style.borderColor = genMode === 'full' ? cv('--ok-active-bd') : '';
   $('mode-data').style.borderColor = genMode === 'data' ? cv('--ok-active-bd') : '';
   refreshSettingsSession();
+}
+// ─── Selector de modelos junto al input (al lado del pincel) ────────────────
+function availableModels() {
+  const list = (cachedHealth && Array.isArray(cachedHealth.models) && cachedHealth.models.length)
+    ? [...cachedHealth.models]
+    : [];
+  const groq = (cachedHealth && (cachedHealth.groq_models || (cachedHealth.groq_model ? [cachedHealth.groq_model] : []))) || [];
+  groq.forEach((m) => { if (m && !list.includes(m)) list.push(m); });
+  if (genModel && !list.includes(genModel)) list.push(genModel);
+  return list;
+}
+function shortModelName(m) {
+  if (!m) return 'default';
+  // acorta "gemini-3.6-flash" -> "3.6-flash" para que quepa junto al pincel
+  return String(m).replace(/^gemini-/i, '');
+}
+function refreshModelButton() {
+  const label = $('model-btn-label');
+  if (label) label.textContent = shortModelName(genModel);
+  const btn = $('model-btn');
+  if (btn) {
+    btn.title = genModel ? ('Model: ' + genModel) : 'Model: default';
+    btn.style.borderColor = genModel ? 'var(--ok-mid-bd)' : 'var(--glass-border)';
+  }
+}
+function renderModelList() {
+  const box = $('model-list');
+  if (!box) return;
+  const models = availableModels();
+  const items = ['', ...models.filter((m) => m)];
+  box.innerHTML = items.map((m) => {
+    const active = (m || '') === (genModel || '');
+    const name = m ? escapeHtml(m) : 'default';
+    return '<button type="button" data-model="' + escapeHtml(m) + '" style="display:flex; align-items:center; gap:8px; width:100%; text-align:left; padding:8px 10px; font-size:12.5px; border-radius:8px; cursor:pointer; border:1px solid ' + (active ? 'var(--ok-mid-bd)' : 'transparent') + '; background:' + (active ? 'var(--ok-soft-bg)' : 'transparent') + '; color:' + (active ? 'var(--ok-color)' : 'var(--text-primary)') + ';">'
+      + '<i class="bi ' + (active ? 'bi-check-circle-fill' : 'bi-cpu') + '"></i><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + name + '</span></button>';
+  }).join('') || '<div style="font-size:12px;color:var(--text-muted); padding:6px 8px;">No models</div>';
+  box.querySelectorAll('[data-model]').forEach((b) => b.addEventListener('click', () => {
+    genModel = b.getAttribute('data-model') || '';
+    persistSettings();
+    refreshModelButton();
+    renderModelList();
+    closeModelPopover();
+    if (!syncLock) { broadcastSync('model', genModel); pushPrefs(); }
+  }));
+}
+function toggleModelPopover() {
+  const pop = $('model-popover');
+  if (!pop) return;
+  const open = pop.style.display === 'block';
+  if (open) { closeModelPopover(); return; }
+  renderModelList();
+  pop.style.display = 'block';
+}
+function closeModelPopover() {
+  const pop = $('model-popover');
+  if (pop) pop.style.display = 'none';
 }
 function openSettings() {
   syncSettingsUI();
@@ -392,7 +481,16 @@ function openSettings() {
   $('settings-overlay').style.display = 'block';
 }
 function closeSettings() { $('settings-modal').style.display = 'none'; $('settings-overlay').style.display = 'none'; }
+function openStyle() {
+  syncSettingsUI();
+  $('style-modal').style.display = 'block';
+  $('style-overlay').style.display = 'block';
+}
+function closeStyle() { $('style-modal').style.display = 'none'; $('style-overlay').style.display = 'none'; }
 $('btn-settings').addEventListener('click', openSettings);
+$('style-btn').addEventListener('click', openStyle);
+$('btn-close-style').addEventListener('click', closeStyle);
+$('style-overlay').addEventListener('click', closeStyle);
 $('btn-close-settings').addEventListener('click', closeSettings);
 $('settings-overlay').addEventListener('click', closeSettings);
 document.querySelectorAll('#style-presets [data-preset]').forEach((b) => b.addEventListener('click', () => {
@@ -410,7 +508,12 @@ $('style-textarea').addEventListener('input', (e) => {
   if (e.target.value !== (STYLE_PRESETS[stylePreset] || '')) stylePreset = 'custom';
   openSettingsRefresh();
 });
-$('gen-model').addEventListener('change', (e) => { genModel = e.target.value; persistSettings(); refreshSettingsDot(); });
+$('model-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleModelPopover(); });
+document.addEventListener('click', (e) => {
+  const pop = $('model-popover');
+  if (pop && pop.style.display === 'block' && !e.target.closest('#model-popover') && !e.target.closest('#model-btn')) closeModelPopover();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModelPopover(); });
 $('gen-temp').addEventListener('input', (e) => {
   genTemp = Math.round(Number(e.target.value)) / 100;
   $('gen-temp-val').textContent = genTemp.toFixed(1);
@@ -423,14 +526,15 @@ $('btn-style-save').addEventListener('click', () => {
   if (!stylePrompt) stylePreset = 'minimalist';
   persistSettings();
   refreshSettingsDot();
-  closeSettings();
+  closeStyle();
   showToast(t('style_saved'), 'success');
 });
 $('btn-style-reset').addEventListener('click', () => {
   stylePrompt = ''; stylePreset = 'minimalist'; genModel = ''; genTemp = 0.7; genMode = 'full';
   try { localStorage.removeItem(STYLE_KEY); } catch (e) {}
   refreshSettingsDot();
-  closeSettings();
+  refreshModelButton();
+  closeStyle();
 });
 function refreshSettingsSession() {
   let session = null;
@@ -476,7 +580,7 @@ async function refreshSettingsDatasets() {
       btn.textContent = t('delete');
       btn.addEventListener('click', async () => {
         await fetch('/api/datasets/' + encodeURIComponent(d.id), { method: 'DELETE' });
-        if (activeDataset && activeDataset.id === d.id) { activeDataset = null; refreshDatasetChip(); }
+        if (activeDataset && activeDataset.id === d.id) { activeDataset = null; datasetChanged(); }
         refreshSettingsDatasets();
       });
       box.appendChild(row);
@@ -517,13 +621,13 @@ async function wipeAll(keepImportant) {
     try { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
   }
   if (!keepImportant) {
-    try { localStorage.removeItem(STYLE_KEY); localStorage.removeItem(UI_KEY); localStorage.removeItem(IMPORTANT_KEY); } catch (e) {}
+    try { localStorage.removeItem(STYLE_KEY); localStorage.removeItem(UI_KEY); localStorage.removeItem(IMPORTANT_KEY); localStorage.removeItem(ANIM_KEY); localStorage.removeItem(THEME_CACHE_KEY); } catch (e) {}
     stylePrompt = ''; stylePreset = 'minimalist'; genModel = ''; genTemp = 0.7; genMode = 'full';
-    themeId = 'red-white'; userCss = '';
-    applyTheme(); refreshSettingsDot();
+themeId = 'red'; uiScheme = 'auto'; userCss = ''; animOn = true;
+    applyTheme(); applyAnim(); refreshSettingsDot(); refreshModelButton();
   }
   if (activeDataset && !(keepImportant && imp.datasets.includes(activeDataset.id))) {
-  activeDataset = null; refreshDatasetChip();
+  activeDataset = null; datasetChanged();
   attachedImages = []; renderImgStrip();
   }
   closeWipe(); closeSettings();
@@ -534,44 +638,74 @@ $('btn-wipe-keep').addEventListener('click', () => wipeAll(true));
 $('btn-wipe-all2').addEventListener('click', () => wipeAll(false));
 refreshSettingsDot();
 
+// ─── Motion toggle (separate key so "Borrar todo" no lo rompe sin querer) ───
+const ANIM_KEY = 'glintmesh-anim-v1';
+let animOn = true;
+try {
+  const savedAnim = localStorage.getItem(ANIM_KEY);
+  if (savedAnim === 'off') animOn = false;
+} catch (e) {}
+function applyAnim() {
+  document.body.classList.toggle('no-anim', !animOn);
+  const box = $('ui-anim');
+  if (box) box.checked = animOn;
+}
+function persistAnim() {
+  try { localStorage.setItem(ANIM_KEY, animOn ? 'on' : 'off'); } catch (e) {}
+}
+
 // ─── App appearance: themes (JSON) + custom CSS (app shell only) ────────────
 const UI_KEY = 'glintmesh-ui-v3';
+const THEME_CACHE_KEY = 'glintmesh-theme-cache-v1';
 let THEMES = [];
-let themeId = 'red-white', userCss = '';
+let themeId = 'red', uiScheme = 'auto', userCss = '';
 try {
   const savedUI = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
   if (savedUI) {
     if (typeof savedUI.theme === 'string' && savedUI.theme) themeId = savedUI.theme;
+    if (savedUI.scheme === 'dark' || savedUI.scheme === 'light' || savedUI.scheme === 'auto') uiScheme = savedUI.scheme;
     userCss = (savedUI.css || '').slice(0, 3000);
   }
 } catch (e) {}
+const schemeMq = window.matchMedia('(prefers-color-scheme: dark)');
+function effScheme() { return uiScheme === 'auto' ? (schemeMq.matches ? 'dark' : 'light') : (uiScheme === 'dark' ? 'dark' : 'light'); }
 function cv(name, fallback = '') {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
 }
 function getTheme(id) { return THEMES.find((t) => t.id === id) || null; }
 function applyTheme() {
+  const scheme = effScheme();
   document.body.dataset.theme = themeId;
+  document.body.dataset.scheme = scheme;
   const root = document.documentElement;
   for (const p of Array.from(root.style)) { if (p.startsWith('--')) root.style.removeProperty(p); }
   const theme = getTheme(themeId);
-  if (theme && theme.vars) {
-    Object.entries(theme.vars).forEach(([k, v]) => { if (v !== '' && v != null) root.style.setProperty(k, v); });
+  const part = theme ? (theme[scheme] || theme.light || theme.dark) : null;
+  if (part && part.vars) {
+    Object.entries(part.vars).forEach(([k, v]) => { if (v !== '' && v != null) root.style.setProperty(k, v); });
   }
   const tag = $('theme-css');
-  if (tag) tag.textContent = (theme && theme.css) || '';
+  if (tag) tag.textContent = (part && part.css) || '';
   const u = $('user-css');
   if (u) u.textContent = userCss;
+  // snapshot para pre-pintar el tema en <head> antes del primer paint (evita flash)
+  try {
+    localStorage.setItem(THEME_CACHE_KEY, JSON.stringify({
+      theme: themeId, scheme, vars: (part && part.vars) || {}, css: (part && part.css) || '',
+    }));
+  } catch (e) {}
   document.querySelectorAll('#theme-grid [data-theme]').forEach((b) => {
     b.style.borderColor = b.dataset.theme === themeId ? cv('--ok-active-bd') : '';
   });
-  if ($('ui-dark')) $('ui-dark').style.borderColor = themeId === 'dark' ? cv('--ok-active-bd') : '';
-  if ($('ui-light')) $('ui-light').style.borderColor = themeId === 'light' ? cv('--ok-active-bd') : '';
+  if ($('ui-dark')) $('ui-dark').style.borderColor = uiScheme === 'dark' ? cv('--ok-active-bd') : '';
+  if ($('ui-light')) $('ui-light').style.borderColor = uiScheme === 'light' ? cv('--ok-active-bd') : '';
+  if ($('ui-auto')) $('ui-auto').style.borderColor = uiScheme === 'auto' ? cv('--ok-active-bd') : '';
   const ta = $('user-css-textarea');
   if (ta && document.activeElement !== ta) ta.value = userCss;
 }
 function persistUI() {
-  try { localStorage.setItem(UI_KEY, JSON.stringify({ theme: themeId, css: userCss })); } catch (e) {}
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ theme: themeId, scheme: uiScheme, css: userCss })); } catch (e) {}
 }
 function buildThemeGrid() {
   const grid = $('theme-grid');
@@ -581,42 +715,31 @@ function buildThemeGrid() {
     themeId = b.dataset.theme; persistUI(); applyTheme();
   }));
 }
-$('ui-dark').addEventListener('click', () => { themeId = getTheme('dark') ? 'dark' : (THEMES[0]?.id || 'red-white'); persistUI(); applyTheme(); });
-$('ui-light').addEventListener('click', () => { themeId = getTheme('light') ? 'light' : (THEMES[0]?.id || 'red-white'); persistUI(); applyTheme(); });
+$('ui-auto').addEventListener('click', () => { uiScheme = 'auto'; persistUI(); applyTheme(); });
+$('ui-dark').addEventListener('click', () => { uiScheme = 'dark'; persistUI(); applyTheme(); });
+$('ui-light').addEventListener('click', () => { uiScheme = 'light'; persistUI(); applyTheme(); });
+$('ui-anim').addEventListener('change', (e) => { animOn = !!e.target.checked; persistAnim(); applyAnim(); });
+schemeMq.addEventListener('change', () => { if (uiScheme === 'auto') applyTheme(); });
 $('user-css-textarea').addEventListener('input', (e) => {
   userCss = e.target.value.slice(0, 3000);
   const tag = $('user-css');
   if (tag) tag.textContent = userCss;
   persistUI();
 });
-const CSS_SNIPS = {
-  blue: '#header { background:linear-gradient(135deg,#1e3a8a,#1e40af) !important; }',
-  round: '#sidebar, #content-area, .tool-card, .feature-card, #input-wrapper, .a2ui-card { border-radius:20px !important; }',
-  compact: '#header { height:52px !important; } #main-body { padding:8px !important; gap:8px !important; } .feature-card { padding:10px 8px !important; }',
-};
-document.querySelectorAll('[data-snip]').forEach((b) => b.addEventListener('click', () => {
-  const snip = CSS_SNIPS[b.dataset.snip];
-  if (!snip) return;
-  const ta = $('user-css-textarea');
-  ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + snip;
-  userCss = ta.value.slice(0, 3000);
-  const tag = $('user-css');
-  if (tag) tag.textContent = userCss;
-  persistUI();
-}));
 $('btn-reset-look').addEventListener('click', () => {
-  themeId = 'red-white'; userCss = '';
-  persistUI(); applyTheme();
+  themeId = 'red'; uiScheme = 'auto'; userCss = ''; animOn = true;
+  persistUI(); persistAnim(); applyTheme(); applyAnim();
   showToast(t('style_saved'), 'success');
 });
 applyTheme();
+applyAnim();
 async function loadThemes() {
   try {
     const res = await fetch('/static/themes.json');
     const data = await res.json();
     if (Array.isArray(data.themes)) THEMES = data.themes;
   } catch (e) { THEMES = []; }
-  if (!THEMES.some((t) => t.id === themeId)) themeId = THEMES[0]?.id || 'red-white';
+  if (!THEMES.some((t) => t.id === themeId)) themeId = THEMES[0]?.id || 'red';
   buildThemeGrid();
   applyTheme();
 }
@@ -655,7 +778,7 @@ function refreshDatasetChip() {
     $('dataset-chip-name').textContent = t('using') + ': ' + activeDataset.name;
   } else chip.style.display = 'none';
 }
-$('dataset-chip-x').addEventListener('click', () => { activeDataset = null; refreshDatasetChip(); });
+$('dataset-chip-x').addEventListener('click', () => { activeDataset = null; datasetChanged(); });
 
 async function loadDatasets() {
   const list = $('data-list');
@@ -670,7 +793,7 @@ async function loadDatasets() {
       + '<button class="btn-glass btn-sm" data-ds-use="' + escapeHtml(d.id) + '" style="margin-top:8px;"><i class="bi bi-check"></i> ' + t('use') + '</button></div>').join('');
     list.querySelectorAll('[data-ds-use]').forEach((btn) => btn.addEventListener('click', () => {
       const found = items.find((d) => d.id === btn.dataset.dsUse);
-      if (found) { activeDataset = found; refreshDatasetChip(); loadDatasets(); }
+      if (found) { activeDataset = found; datasetChanged(); loadDatasets(); }
     }));
   } catch (e) { list.innerHTML = '<div style="font-size:12px;color:var(--accent-red);">MCP unreachable</div>'; }
 }
@@ -685,7 +808,7 @@ $('btn-upload').addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'upload failed');
     activeDataset = { id: data.id, name: data.name };
-    refreshDatasetChip();
+    datasetChanged();
     addDatasetPreviewCard(data);
     input.value = '';
     loadDatasets();
@@ -796,6 +919,18 @@ async function handleSubmit(forcedMessage = null, displayLabel = null) {
   const userBubble = $('user-bubble'), userBubbleText = $('user-bubble-text'), userBubbleImgs = $('user-bubble-imgs');
   userBubble.style.display = 'flex';
   userBubbleText.textContent = typeof displayLabel === 'string' && displayLabel.trim() ? displayLabel.trim() : message;
+  // avatar del bubble: foto de perfil si hay login, icono genérico si es invitado
+  const ubAvatar = $('user-bubble-avatar'), myAvatar = (typeof currentAuth === 'function' && currentAuth().avatar) || null;
+  if (ubAvatar) {
+    if (myAvatar) {
+      ubAvatar.style.background = 'transparent';
+      ubAvatar.innerHTML = '<img alt="" style="width:100%; height:100%; object-fit:cover;" />';
+      ubAvatar.querySelector('img').src = myAvatar;
+    } else {
+      ubAvatar.style.background = 'var(--gradient-main)';
+      ubAvatar.innerHTML = '<i class="bi bi-person-fill" style="color:#fff; font-size:12px;"></i>';
+    }
+  }
   userBubbleImgs.innerHTML = '';
   sentImages.forEach((im) => {
     const img = document.createElement('img');
@@ -1008,10 +1143,10 @@ function mountA2UIChart(tool, data, cid) {
     if (tool === 'get_historical_prices' || tool === 'get_live_history') {
       const pts = data.data || [];
       const step = Math.max(1, Math.ceil(pts.length / 14));
-      cfg = { type: 'line', data: { labels: pts.filter((_, i) => i % step === 0).map((p) => p.date), datasets: [{ data: pts.filter((_, i) => i % step === 0).map((p) => p.close), borderColor: okChart, backgroundColor: okFill, fill: true, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { display: false } }, scales: { x: { grid: { color: grid } }, y: { grid: { color: grid } } } } };
+      cfg = { type: 'line', data: { labels: pts.filter((_, i) => i % step === 0).map((p) => p.date), datasets: [{ data: pts.filter((_, i) => i % step === 0).map((p) => p.close), borderColor: okChart, backgroundColor: okFill, fill: true, tension: .3, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: grid } }, y: { grid: { color: grid } } } } };
     } else if (tool === 'calculate_compound_interest') {
       const yrs = data.yearly_breakdown || [];
-      cfg = { type: 'line', data: { labels: yrs.map((y) => 'Y' + y.year), datasets: [{ label: 'Balance', data: yrs.map((y) => y.balance), borderColor: okChart, backgroundColor: okFill, fill: true, tension: .3 }, { label: 'Contributions', data: yrs.map((y) => y.contributions), borderColor: sec, borderDash: [5, 4], fill: false, tension: .3, pointRadius: 0 }] }, options: { plugins: { legend: { labels: { boxWidth: 12 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: grid } } } } };
+      cfg = { type: 'line', data: { labels: yrs.map((y) => 'Y' + y.year), datasets: [{ label: 'Balance', data: yrs.map((y) => y.balance), borderColor: okChart, backgroundColor: okFill, fill: true, tension: .3 }, { label: 'Contributions', data: yrs.map((y) => y.contributions), borderColor: sec, borderDash: [5, 4], fill: false, tension: .3, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { boxWidth: 12 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: grid } } } } };
     }
     if (cfg) state.charts.push(new Chart(el, cfg));
   } catch (e) {}
@@ -1033,10 +1168,17 @@ function handleSSEEvent(event) {
       const cards = toolFeed.querySelectorAll('.tool-card');
       if (cards.length > 0) {
         const last = cards[cards.length - 1];
+        last.classList.remove('st-calling');
+        last.classList.add(event.failed ? 'st-error' : 'st-done');
         const icon = last.querySelector('.tool-status-icon');
         if (icon) { icon.className = 'tool-status-icon ' + (event.failed ? 'error' : 'done'); icon.innerHTML = event.failed ? '<i class="bi bi-x"></i>' : '<i class="bi bi-check"></i>'; }
+        const timeEl = last.querySelector('.tool-time');
+        if (timeEl && last.dataset.t0) timeEl.textContent = ((Date.now() - Number(last.dataset.t0)) / 1000).toFixed(1) + 's';
         const dataDiv = last.querySelector('.tool-data');
-        if (dataDiv && event.data) dataDiv.textContent = JSON.stringify(event.data).slice(0, 140) + '...';
+        if (dataDiv && event.data) {
+          dataDiv.classList.remove('pending');
+          dataDiv.textContent = JSON.stringify(event.data).slice(0, 140) + '...';
+        }
       }
       if (event.tool) state.toolResults[event.tool] = { data: event.data, failed: !!event.failed };
       updateA2UICard(event.tool, event.data, event.failed);
@@ -1047,15 +1189,15 @@ function handleSSEEvent(event) {
 }
 
 function addToolCard(name, status = 'calling') {
-  const card = document.createElement('div'); card.className = 'tool-card';
-  const iconContent = status === 'calling' ? '<i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite;"></i>' : '<i class="bi bi-check"></i>';
-  card.innerHTML = '<div class="tool-name"><div class="tool-status-icon ' + status + '">' + iconContent + '</div><span></span><span class="proto-badge mcp">MCP</span></div><div class="tool-data">Calling MCP tool...</div>';
-  card.querySelector('.tool-name span').textContent = name.replace(/_/g, ' ');
-  if (!document.getElementById('spin-style')) {
-    const s = document.createElement('style'); s.id = 'spin-style';
-    s.textContent = '@keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }';
-    document.head.appendChild(s);
-  }
+  const card = document.createElement('div');
+  card.className = 'tool-card st-' + status;
+  card.dataset.t0 = Date.now();
+  card.dataset.tool = name;
+  card.innerHTML = '<div class="tool-head"><div class="tool-status-icon calling"></div>'
+    + '<span class="tool-name"></span><span class="proto-badge mcp">MCP</span><span class="tool-time"></span></div>'
+    + '<div class="tool-data pending"><span class="thinking-dots"><span></span><span></span><span></span></span><span></span></div>';
+  card.querySelector('.tool-name').textContent = name.replace(/_/g, ' ');
+  card.querySelector('.tool-data span:last-child').textContent = t('tool_calling');
   toolFeed.appendChild(card); toolFeed.scrollTop = toolFeed.scrollHeight;
   return card;
 }
@@ -1125,6 +1267,7 @@ function finalize(fullText) {
   }
   state.lastSummary = (agentBubble.style.display === 'none' ? fullText : agentBubbleText.textContent).slice(0, 800);
   saveSession();
+  pushLiveSubscription();
 }
 
 function isAuthed() {
@@ -1177,12 +1320,250 @@ function renderPreview(html) {
 function setStatus(text, type = '') { statusText.textContent = text; statusText.className = type ? 'active ' + type : ''; }
 function showToast(message, type = 'info') {
   const container = $('toast-container');
-  const icons = { success: 'bi-check-circle-fill', error: 'bi-x-circle-fill', info: 'bi-info-circle-fill' };
-  const colors = { success: 'var(--accent-green)', error: 'var(--accent-red)', info: 'var(--accent-cyan)' };
-  const el = document.createElement('div'); el.className = 'toast-item ' + type;
+  const icons = { success: 'bi-check-circle-fill', error: 'bi-x-circle-fill', info: 'bi-info-circle-fill', warn: 'bi-exclamation-triangle-fill' };
+  const colors = { success: 'var(--accent-green)', error: 'var(--accent-red)', info: 'var(--accent-cyan)', warn: 'var(--warn-color)' };
+  const el = document.createElement('div'); el.className = 'toast-item ' + (type === 'warn' ? 'warn' : type);
   el.innerHTML = '<i class="bi ' + (icons[type] || icons.info) + '" style="color:' + (colors[type] || colors.info) + '; font-size:16px;"></i><span></span>';
   el.querySelector('span').textContent = message; container.appendChild(el);
   setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'all .3s ease'; setTimeout(() => el.remove(), 300); }, 3500);
+}
+
+// ─── Live channel (/ws/live): ticks, alerts, agent progress, prefs sync ─────
+const liveSock = new LiveSocket(() => {
+  try { return (currentAuth() || {}).token || ''; } catch (e) { return ''; }
+});
+let liveAvailable = false, liveUnread = 0, syncLock = false;
+const WATCH_KEY = 'glintmesh-watches-v1';
+let watches = {};
+try {
+  const savedW = JSON.parse(localStorage.getItem(WATCH_KEY) || 'null');
+  if (savedW && typeof savedW === 'object') watches = savedW;
+} catch (e) {}
+function saveWatches() { try { localStorage.setItem(WATCH_KEY, JSON.stringify(watches)); } catch (e) {} }
+function watchList() {
+  return Object.entries(watches).map(([symbol, c]) => ({
+    symbol, above: c && c.above != null ? c.above : null, below: c && c.below != null ? c.below : null,
+  }));
+}
+function setLivePill(mode) {
+  const dot = $('live-dot'), txt = $('live-text'), badge = $('live-badge');
+  if (!dot || !txt || !badge) return;
+  dot.className = mode === 'off' ? '' : (mode === 'alert' ? 'alert' : 'on');
+  txt.textContent = mode === 'off' ? t('offline') : t('live');
+  badge.style.display = (mode === 'alert' && liveUnread > 0) ? '' : 'none';
+  if (liveUnread > 0) badge.textContent = liveUnread;
+}
+function collectSymbols() {
+  const out = [];
+  const push = (s) => {
+    s = String(s || '').toUpperCase();
+    if (s && !out.includes(s)) out.push(s);
+  };
+  Object.values(state.toolResults || {}).forEach((v) => {
+    const d = v && v.data;
+    if (!d || typeof d !== 'object') return;
+    if (d.symbol) push(d.symbol);
+    (d.positions || []).forEach((p) => push(p.symbol));
+  });
+  Object.keys(watches).forEach(push);
+  return out.slice(0, 20);
+}
+function pushLiveSubscription() {
+  liveSock.subscribe(collectSymbols(), watches);
+}
+function updateLiveQuoteCards(symbol, price, chg) {
+  a2uiFeed.querySelectorAll('.a2ui-card').forEach((card) => {
+    const symEl = card.querySelector('.a2ui-sym');
+    if (!symEl || symEl.textContent.trim().toUpperCase() !== symbol) return;
+    const priceEl = card.querySelector('.a2ui-price');
+    if (!priceEl) return;
+    priceEl.innerHTML = fmtMoney(price) + ' ' + deltaBadge(Number(chg) || 0);
+    priceEl.classList.remove('tick-flash');
+    void priceEl.offsetWidth;
+    priceEl.classList.add('tick-flash');
+  });
+}
+function renderWatches() {
+  const box = $('watch-list');
+  if (!box) return;
+  const items = Object.entries(watches);
+  const count = $('watch-count');
+  count.style.display = items.length ? '' : 'none';
+  count.textContent = items.length;
+  if (!items.length) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">' + t('no_watches') + '</div>';
+    return;
+  }
+  box.innerHTML = '';
+  items.forEach(([sym, c]) => {
+    const cond = [(c.above != null ? '↑' + c.above : null), (c.below != null ? '↓' + c.below : null)].filter(Boolean).join(' · ');
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:8px; padding:7px 10px;';
+    row.innerHTML = '<i class="bi bi-bell" style="color:var(--warn-color);"></i><strong></strong><span style="color:var(--text-secondary);"></span><button class="btn-glass btn-sm" style="margin-left:auto; padding:2px 8px;" title="Delete">×</button>';
+    row.querySelector('strong').textContent = sym;
+    row.querySelector('span').textContent = cond;
+    row.querySelector('button').addEventListener('click', () => { delete watches[sym]; watchesChanged(); });
+    box.appendChild(row);
+  });
+}
+function watchesChanged() {
+  saveWatches();
+  renderWatches();
+  pushLiveSubscription();
+  if (!syncLock) { broadcastSync('watches', watches); pushPrefs(); }
+}
+function remoteAgent(a) {
+  if (!a || state.isGenerating) return;
+  if (a.kind === 'done') setStatus(t('done_ok'), 'success');
+  else if (a.kind === 'error') setStatus(t('failed'), 'error');
+  else setStatus(t('generating'), 'active');
+}
+window.addEventListener('live:open', () => setLivePill(liveAvailable ? 'on' : 'off'));
+window.addEventListener('live:close', () => setLivePill('off'));
+window.addEventListener('live:hello', (e) => {
+  const d = e.detail || {};
+  liveAvailable = d.live !== false;
+  setLivePill(liveAvailable ? 'on' : 'off');
+  pushLiveSubscription();
+  if (d.agent) remoteAgent(d.agent);
+});
+window.addEventListener('live:tick', (e) => {
+  const d = e.detail || {};
+  if (!d.symbol) return;
+  updateLiveQuoteCards(String(d.symbol).toUpperCase(), d.price, d.change_percent);
+});
+window.addEventListener('live:alert', (e) => {
+  const d = e.detail || {};
+  if (!d.symbol) return;
+  const msg = (d.condition === 'below' ? t('alert_below') : t('alert_above'))
+    .replace('{s}', d.symbol).replace('{v}', d.threshold);
+  showToast(msg + ' · ' + fmtMoney(d.price), 'warn');
+  liveUnread++;
+  setLivePill('alert');
+});
+window.addEventListener('live:agent', (e) => remoteAgent(e.detail));
+window.addEventListener('live:status', () => { liveAvailable = false; setLivePill('off'); });
+window.addEventListener('live:sync', (e) => {
+  const prefs = (e.detail || {}).prefs;
+  if (prefs) applyRemotePrefs(prefs);
+});
+$('btn-watches').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const pop = $('watch-popover');
+  pop.style.display = pop.style.display === 'block' ? 'none' : 'block';
+  if (pop.style.display === 'block') renderWatches();
+  liveUnread = 0;
+  setLivePill(liveAvailable ? 'on' : 'off');
+});
+document.addEventListener('click', (e) => {
+  const pop = $('watch-popover');
+  if (pop && pop.style.display === 'block'
+    && !e.target.closest('#watch-popover') && !e.target.closest('#btn-watches') && !e.target.closest('#live-pill')) {
+    pop.style.display = 'none';
+  }
+});
+$('watch-add').addEventListener('click', () => {
+  const sym = ($('watch-sym').value || '').trim().toUpperCase().replace(/[^A-Z0-9.\-=]/g, '').slice(0, 12);
+  const above = parseFloat($('watch-above').value);
+  const below = parseFloat($('watch-below').value);
+  if (!sym || (!(above > 0) && !(below > 0))) { showToast(t('watch_need'), 'error'); return; }
+  watches[sym] = { above: above > 0 ? above : null, below: below > 0 ? below : null };
+  $('watch-sym').value = '';
+  $('watch-above').value = '';
+  $('watch-below').value = '';
+  watchesChanged();
+});
+const livePill = $('live-pill');
+if (livePill) livePill.addEventListener('click', () => $('btn-watches').click());
+
+// ─── Sync multi-tab (BroadcastChannel) + multi-device (prefs del servidor) ───
+const syncChan = ('BroadcastChannel' in window) ? new BroadcastChannel('glintmesh-sync-v1') : null;
+function broadcastSync(kind, value) {
+  if (!syncChan) return;
+  try { syncChan.postMessage({ kind, value }); } catch (e) {}
+}
+if (syncChan) syncChan.onmessage = (ev) => {
+  const m = ev.data || {};
+  if (m && m.kind) applyRemote(m.kind, m.value);
+};
+function applyRemote(kind, value) {
+  if (kind === 'model' && typeof value === 'string') {
+    syncLock = true;
+    genModel = value; persistSettings(); refreshModelButton(); renderModelList();
+    syncLock = false;
+  } else if (kind === 'lang' && (value === 'es' || value === 'en')) {
+    syncLock = true;
+    applyLang(value); refreshConfigLabels();
+    syncLock = false;
+  } else if (kind === 'dataset') {
+    syncLock = true;
+    resolveDataset(value).finally(() => { syncLock = false; });
+  } else if (kind === 'watches' && value && typeof value === 'object') {
+    syncLock = true;
+    watches = value; saveWatches(); renderWatches(); pushLiveSubscription();
+    syncLock = false;
+  }
+}
+async function resolveDataset(id) {
+  if (!id) { activeDataset = null; refreshDatasetChip(); return; }
+  try {
+    const res = await fetch('/api/datasets');
+    const data = await res.json();
+    const found = (data.datasets || []).find((d) => d.id === id);
+    activeDataset = found ? { id: found.id, name: found.name } : null;
+  } catch (e) { activeDataset = null; }
+  refreshDatasetChip();
+}
+function applyRemotePrefs(p) {
+  syncLock = true;
+  try {
+    if (typeof p.model === 'string') { genModel = p.model; persistSettings(); refreshModelButton(); }
+    if (p.lang === 'es' || p.lang === 'en') applyLang(p.lang);
+    const rawW = Array.isArray(p.watches) ? p.watches
+      : Object.entries(p.watches || {}).map(([s, c]) => ({ symbol: s, above: c && c.above, below: c && c.below }));
+    const next = {};
+    rawW.forEach((w) => {
+      const s = String((w && w.symbol) || '').toUpperCase();
+      const above = Number(w && w.above), below = Number(w && w.below);
+      if (s && ((above > 0) || (below > 0))) {
+        next[s] = { above: above > 0 ? above : null, below: below > 0 ? below : null };
+      }
+    });
+    watches = next;
+    saveWatches();
+    renderWatches();
+    refreshConfigLabels();
+    pushLiveSubscription();
+  } finally { syncLock = false; }
+  resolveDataset((p && p.dataset_id) || null);
+}
+let prefsTimer = null;
+function pushPrefs() {
+  if (!isAuthed()) return;
+  clearTimeout(prefsTimer);
+  prefsTimer = setTimeout(async () => {
+    try {
+      await fetch('/api/prefs', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          model: genModel || '', dataset_id: (activeDataset && activeDataset.id) || null,
+          lang, watches: watchList(), via: liveSock.conn || null,
+        }),
+      });
+    } catch (e) {}
+  }, 500);
+}
+async function pullPrefs() {
+  if (!isAuthed()) return;
+  try {
+    const res = await fetch('/api/prefs', { headers: authHeaders() });
+    if (!res.ok) return;
+    applyRemotePrefs(await res.json());
+  } catch (e) {}
+}
+function datasetChanged() {
+  refreshDatasetChip();
+  if (!syncLock) { broadcastSync('dataset', (activeDataset && activeDataset.id) || null); pushPrefs(); }
 }
 
 let cachedHealth = null;
@@ -1293,6 +1674,34 @@ function authHeaders() {
 function currentAuth() {
   try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}; } catch (e) { return {}; }
 }
+let authMode = 'login', authBusy = false;
+function authNote(msg, ok) {
+  const el = $('auth-note');
+  el.textContent = msg || '';
+  el.style.color = ok === true ? 'var(--ok-color)' : (ok === false ? 'var(--err-color)' : 'var(--text-muted)');
+}
+function paintAuthMode() {
+  const reg = authMode === 'register';
+  $('auth-tab-login').classList.toggle('active', !reg);
+  $('auth-tab-register').classList.toggle('active', reg);
+  $('auth-confirm-row').style.display = reg ? 'flex' : 'none';
+  $('auth-title').textContent = reg ? t('signup') : t('signin_title');
+  if (!authBusy) $('auth-submit-label').textContent = reg ? t('auth_create') : t('signin');
+}
+function setAuthMode(next) {
+  authMode = next === 'register' ? 'register' : 'login';
+  authNote('', null);
+  paintAuthMode();
+}
+function setAuthBusy(on) {
+  authBusy = on;
+  const btn = $('btn-auth-submit');
+  btn.disabled = on;
+  btn.style.opacity = on ? '.6' : '';
+  $('auth-submit-label').innerHTML = on
+    ? '<i class="bi bi-arrow-repeat" style="display:inline-block; animation:spin 1s linear infinite;"></i> ' + escapeHtml(t('auth_checking'))
+    : escapeHtml(authMode === 'register' ? t('auth_create') : t('signin'));
+}
 function refreshAuthLabel() {
   const s = currentAuth();
   const user = s.user || null, avatar = s.avatar || null;
@@ -1300,33 +1709,117 @@ function refreshAuthLabel() {
   $('auth-avatar').style.display = avatar ? 'inline-block' : 'none';
   $('auth-icon').style.display = avatar ? 'none' : '';
   if (avatar) $('auth-avatar-img').src = avatar;
-  $('btn-logout').style.display = user ? 'block' : 'none';
-  $('auth-profile').style.display = user ? 'flex' : 'none';
-  $('auth-guest-note').style.display = user ? 'none' : 'block';
-  $('auth-user').style.display = user ? 'none' : 'block';
-  $('auth-pass').style.display = user ? 'none' : 'block';
-  $('btn-login').style.display = user ? 'none' : 'block';
-  $('btn-register').style.display = user ? 'none' : 'block';
-  if (user) {
+  const logged = !!user;
+  $('auth-tabs').style.display = logged ? 'none' : 'flex';
+  $('auth-profile').style.display = logged ? 'flex' : 'none';
+  $('auth-logged-actions').style.display = logged ? 'flex' : 'none';
+  $('auth-guest-note').style.display = logged ? 'none' : 'block';
+  $('auth-field-user').style.display = logged ? 'none' : 'flex';
+  $('auth-field-pass').style.display = logged ? 'none' : 'flex';
+  $('auth-note').style.display = logged ? 'none' : 'block';
+  $('btn-auth-submit').style.display = logged ? 'none' : 'block';
+  if (logged) {
+    $('auth-pw-form').style.display = 'none';
+    $('auth-confirm-row').style.display = 'none';
     $('auth-profile-name').textContent = user;
     $('auth-profile-img').style.display = avatar ? 'block' : 'none';
     $('auth-profile-icon').style.display = avatar ? 'none' : 'block';
     if (avatar) $('auth-profile-img').src = avatar;
+  } else {
+    paintAuthMode();
   }
 }
-$('btn-auth').addEventListener('click', () => { refreshAuthLabel(); $('auth-modal').style.display = 'block'; $('auth-overlay').style.display = 'block'; });
+function openAuth() {
+  refreshAuthLabel();
+  $('auth-modal').style.display = 'block';
+  $('auth-overlay').style.display = 'block';
+  if (!currentAuth().user) setTimeout(() => $('auth-user').focus(), 50);
+}
+$('btn-auth').addEventListener('click', openAuth);
+$('auth-tab-login').addEventListener('click', () => setAuthMode('login'));
+$('auth-tab-register').addEventListener('click', () => setAuthMode('register'));
 $('btn-close-auth').addEventListener('click', () => { $('auth-modal').style.display = 'none'; $('auth-overlay').style.display = 'none'; });
 $('auth-overlay').addEventListener('click', () => { $('auth-modal').style.display = 'none'; $('auth-overlay').style.display = 'none'; });
-$('btn-register').addEventListener('click', async () => {
+document.querySelectorAll('.pw-eye').forEach((b) => b.addEventListener('click', () => {
+  const input = $(b.dataset.for);
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  b.innerHTML = '<i class="bi ' + (show ? 'bi-eye-slash' : 'bi-eye') + '"></i>';
+  input.focus();
+}));
+async function submitAuth() {
+  if (authBusy || currentAuth().user) return;
   const user = $('auth-user').value.trim(), password = $('auth-pass').value;
-  if (user.length < 3 || password.length < 4) { $('auth-note').textContent = t('auth_short'); return; }
-  const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
-  if (!res.ok) { $('auth-note').textContent = t('auth_reg_fail') + ' (' + res.status + ')'; return; }
-  // auto-login: registra y entra directo, sin paso extra
-  const login = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
-  if (!login.ok) { $('auth-note').textContent = t('auth_enter_login'); return; }
-  await applyAuthSession(await login.json());
+  if (user.length < 3 || password.length < 4) { authNote(t('auth_short'), false); return; }
+  const headers = { 'Content-Type': 'application/json' };
+  setAuthBusy(true);
+  authNote(t('auth_checking'), null);
+  try {
+    if (authMode === 'register') {
+      if (password !== $('auth-confirm').value) { authNote(t('pw_mismatch'), false); return; }
+      const res = await fetch('/api/auth/register', { method: 'POST', headers, body: JSON.stringify({ user, password }) });
+      if (res.status === 409) { authNote(t('auth_taken'), false); return; }
+      if (!res.ok) { authNote(t('auth_reg_fail'), false); return; }
+      // auto-login: registra y entra directo, sin paso extra
+      const login = await fetch('/api/auth/login', { method: 'POST', headers, body: JSON.stringify({ user, password }) });
+      if (!login.ok) { authNote(t('auth_enter_login'), false); return; }
+      $('auth-pass').value = '';
+      $('auth-confirm').value = '';
+      authNote('', null);
+      await applyAuthSession(await login.json());
+      return;
+    }
+    if (!user || !password) { authNote(t('auth_empty'), false); return; }
+    const res = await fetch('/api/auth/login', { method: 'POST', headers, body: JSON.stringify({ user, password }) });
+    if (res.status === 401) { authNote(t('auth_bad'), false); return; }
+    if (!res.ok) { authNote(t('auth_login_fail'), false); return; }
+    $('auth-pass').value = '';
+    authNote('', null);
+    await applyAuthSession(await res.json());
+  } finally {
+    setAuthBusy(false);
+    paintAuthMode();
+  }
+}
+$('btn-auth-submit').addEventListener('click', submitAuth);
+// Enter en cualquier campo del formulario = enviar
+['auth-user', 'auth-pass', 'auth-confirm'].forEach((id) => $(id).addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitAuth(); }
+}));
+$('btn-pw-toggle').addEventListener('click', () => {
+  const form = $('auth-pw-form');
+  form.style.display = form.style.display === 'flex' ? 'none' : 'flex';
+  $('pw-note').textContent = '';
+  if (form.style.display === 'flex') setTimeout(() => $('pw-current').focus(), 50);
 });
+async function submitPasswordChange() {
+  const note = $('pw-note');
+  const current = $('pw-current').value, next = $('pw-new').value;
+  if (next.length < 4) { note.textContent = t('auth_short'); note.style.color = 'var(--err-color)'; return; }
+  note.textContent = t('auth_checking');
+  note.style.color = 'var(--text-muted)';
+  try {
+    const res = await fetch('/api/auth/password', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ current, new: next }),
+    });
+    if (res.status === 401) { note.textContent = t('pw_bad_current'); note.style.color = 'var(--err-color)'; return; }
+    if (!res.ok) { note.textContent = t('auth_login_fail'); note.style.color = 'var(--err-color)'; return; }
+    $('pw-current').value = '';
+    $('pw-new').value = '';
+    $('auth-pw-form').style.display = 'none';
+    note.textContent = '';
+    showToast(t('pw_saved'), 'success');
+  } catch (e) {
+    note.textContent = t('auth_login_fail');
+    note.style.color = 'var(--err-color)';
+  }
+}
+$('btn-pw-save').addEventListener('click', submitPasswordChange);
+['pw-current', 'pw-new'].forEach((id) => $(id).addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitPasswordChange(); }
+}));
 async function applyAuthSession(data) {
   try { localStorage.setItem(AUTH_KEY, JSON.stringify(data)); } catch (e) {}
   // la sesion de invitado pasa a ser persistente al entrar
@@ -1337,31 +1830,42 @@ async function applyAuthSession(data) {
   } catch (e) {}
   refreshAuthLabel();
   $('auth-modal').style.display = 'none'; $('auth-overlay').style.display = 'none';
+  liveSock.reconnect();
+  pullPrefs();
   showToast((data && data.user) || '', 'success');
 }
-$('btn-login').addEventListener('click', async () => {
-  const user = $('auth-user').value.trim(), password = $('auth-pass').value;
-  if (!user || !password) { $('auth-note').textContent = t('auth_empty'); return; }
-  const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
-  if (!res.ok) { $('auth-note').textContent = (res.status === 401 ? t('auth_bad') : t('auth_login_fail')) + ' (' + res.status + ')'; return; }
-  await applyAuthSession(await res.json());
-});
-// Enter en usuario/clave = entrar
-[$('auth-user'), $('auth-pass')].forEach((el) => el.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); $('btn-login').click(); }
-}));
 $('btn-logout').addEventListener('click', async () => {
   try {
     const s = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
     if (s && s.token) await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: s.token }) });
   } catch (e) {}
   try { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+  liveSock.reconnect();
   refreshAuthLabel();
 });
 // Guest mode: info lives only in this tab; never persist guests to disk.
 window.addEventListener('beforeunload', () => {
   if (!isAuthed()) { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
 });
+// Valida el token guardado contra el backend para mantener el username.
+// Si el token sigue siendo válido, refresca user/avatar desde el servidor.
+// Si es inválido, limpia solo el auth (no la sesión) y muestra Sign in.
+async function validateAuth() {
+  const s = currentAuth();
+  if (!s.token) { refreshAuthLabel(); return; }
+  try {
+    const res = await fetch('/api/auth/me', { headers: authHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data && data.user) {
+      const next = { ...s, user: data.user, avatar: data.avatar || s.avatar || null };
+      try { localStorage.setItem(AUTH_KEY, JSON.stringify(next)); } catch (e) {}
+      pullPrefs();
+    } else {
+      try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
+    }
+  } catch (e) { /* sin red: conserva el user local para no parpadear a Sign in */ }
+  refreshAuthLabel();
+}
 // ─── Avatar: foto de perfil (max ~300 KB) ──────────────────────────────────
 $('btn-avatar-pick').addEventListener('click', () => $('auth-avatar-input').click());
 $('auth-avatar-input').addEventListener('change', (e) => {
@@ -1441,12 +1945,21 @@ async function loadConfiguration() {
 }
 function refreshConfigLabels() {
   if (!cachedHealth) return;
-  $('model-description').textContent = 'Model: ' + cachedHealth.model + ' • A2UI over MCP • v' + (cachedHealth.version || '2.0.0');
+  const active = genModel || cachedHealth.model;
+  const desc = $('model-description');
+  if (desc) desc.textContent = 'Model: ' + active + ' • A2UI over MCP • v' + (cachedHealth.version || '2.0.0');
   const mcpEl = $('mcp-description');
   if (mcpEl) mcpEl.textContent = cachedHealth.mcp_enabled ? t('f3d') : t('f3d_off');
   const v = $('version-label');
   if (v) v.textContent = 'GlintMesh • v' + (cachedHealth.version || '2.0.0');
+  refreshModelButton();
 }
 applyLang(lang);
+refreshAuthLabel();
+refreshModelButton();
+renderWatches();
+setLivePill('off');
 restoreSession();
 loadConfiguration();
+validateAuth();
+liveSock.connect();

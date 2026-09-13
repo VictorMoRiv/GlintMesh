@@ -116,6 +116,7 @@ MongoDB se consulta exclusivamente desde el servidor: **Frontend → FastAPI →
 ## API
 
 - `GET /`: interfaz web.
+
 - `POST /api/generate`: genera interfaz en streaming SSE. Acepta:
   - `message`: texto del usuario (1-500 caracteres).
   - `lang`: `"es"` | `"en"`.
@@ -131,7 +132,39 @@ MongoDB se consulta exclusivamente desde el servidor: **Frontend → FastAPI →
 - `GET /api/tools`: herramientas MCP disponibles agrupadas por servidor.
 - `POST /api/datasets` / `GET /api/datasets` / `DELETE /api/datasets/{id}`: gestión de datasets CSV/JSON.
 - `POST /api/share` / `GET /share/{id}`: compartir interfaces generadas.
-- `POST /api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `GET /api/auth/me`, `PUT /api/auth/avatar`: autenticación local.
+- `POST /api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `GET /api/auth/me`, `PUT /api/auth/avatar`: autenticación local.
+- `POST /api/pdf`: descarga directa del HTML generado como PDF A4 (`attachment; filename="glintmesh-interface-<timestamp>.pdf"`).
+- `GET /api/prefs` / `PUT /api/prefs`: preferencias por usuario (modelo, dataset, idioma, alertas).
+- `POST /api/datasets`: sube CSV o JSON propio (máx 2 MB) a `uploads/`; devuelve columnas, filas y muestra.
+- `GET /api/datasets`: datasets subidos con muestra de filas.
+- `DELETE /api/datasets/{id}`: borra un dataset.
+- `POST /api/tool-call`: re-ejecuta un MCP sin Gemini (refresh gratis de superficies A2UI).
+- `POST /api/share` + `GET /share/{id}`: link compartible de una interfaz generada.
+- `POST /api/generate`: JSON `{"message":"...", "lang":"es"|"en", "context":"resumen opcional", "dataset_id":"opcional", "images":[{"mime":"image/png","data":"base64"}]}`; `message` 1-500 chars, `context` hasta 2000, máx 3 imágenes (cada una 1.5 MB, png/jpeg/webp/gif) que llegan a Gemini como `inline_data`. Regla: solo gráficas financieras (charts, tablas, dashboards); si mandas un meme/perro/foto random no se rompe — responde en 1-2 frases que solo trabaja con gráficas y no genera HTML.
+- `POST /api/auth/register` + `POST /api/auth/login` + `GET /api/auth/me` (Bearer, devuelve `user` y `avatar`) + `PUT /api/auth/avatar` (data URL png/jpeg/webp/gif, máx ~300 KB) + `POST /api/auth/logout`: cuentas locales en `users.json` (hash sha256+salt, gitignored). Invitado: tu sesión vive solo en la pestaña y se pierde al salir; con login se guarda en el navegador.
+- `GET /api/tools`: herramientas disponibles; lista vacía cuando MCP está desactivado.
+- `GET /health`: modelo y presencia de configuración, sin exponer la clave. No realiza una llamada de validación a Gemini.
+
+## Live channel (WebSocket)
+
+Además del streaming SSE de `/api/generate`, hay un canal persistente `GET /ws/live` (nativo FastAPI, sin dependencias extra; `?token=` opcional para login):
+
+- **Ticks**: suscríbete con `{"op":"subscribe","symbols":["AAPL"],"watches":{"AAPL":{"above":200,"below":null}}}` y el servidor emite `tick` cada 15 s. La UI actualiza las tarjetas A2UI de cotización solas, sin gastar cuota de Gemini.
+- **Alertas**: cuando un precio cruza tu umbral recibes `alert` (toast ámbar + badge en la píldora LIVE). Configúralas con el botón **Alertas** del tab A2UI.
+- **Progreso cross-tab**: si generas en una pestaña, tus otras pestañas ven el progreso en vivo; al reconectar reciben el último estado.
+- **Sync**: `GET/PUT /api/prefs` guarda modelo, dataset, idioma y alertas por usuario (invitados usan `localStorage` + `BroadcastChannel` solo en ese navegador). Cambiar algo en una pestaña lo refleja en las demás.
+
+Los errores de validación usan HTTP 422; una clave sin configurar usa HTTP 503. Los errores ocurridos durante la generación usan el evento SSE `error` y no emiten `done`. La UI muestra el error con botón **Retry** en 1 clic, y el backend rota keys/modelos ante 429/404/5xx antes de fallar.
+
+## Demo 3 minutos (ver DEMO-3MIN.md)
+
+1. `Hola` → respuesta de texto (0:30). Micrófono para dictar (Web Speech API, Chrome/Edge) y clip para adjuntar hasta 3 gráficas que ve Gemini (memes/perros se rechazan con mensaje, sin romperse).
+2. `Dashboard de portafolio AAPL, MSFT, NVDA` → Preview + A2UI + **Compose dashboard** combina N superficies en 1 (1:30).
+3. **Refresh data** sin cuota + **Retry** en 1 clic si falla Gemini + **Sign in** con foto (invitado pierde todo al salir, logueado lo guarda) (1:00).
+
+Compatibilidad: voz e imágenes con degradado — si el navegador no soporta dictado, el botón avisa; sin login todo sigue funcionando (demo-friendly).
+
+
 
 ## Pruebas
 
