@@ -1,4 +1,5 @@
 import { readSSE } from './sse.mjs';
+import { openPrintView } from './print.mjs';
 
 // ─── i18n ─────────────────────────────────────────────────────────────────
 const I18N = {
@@ -34,6 +35,8 @@ const I18N = {
     wipe_title: '¿Borrar datos guardados?', wipe_will_delete: 'Se borrará:', w_session: 'sesión', w_datasets: 'datasets', w_prefs: 'preferencias',
     imp_tag: 'importante', wiped_ok: 'Datos eliminados',
     session_cleared: 'Sesión limpiada', no_export: 'Aún no hay interfaz para exportar', exported: 'Interfaz exportada',
+    print_pdf: 'PDF / Imprimir', print_empty: 'Aún no hay respuesta para imprimir', print_busy: 'Espera a que termine la generación', print_blocked: 'No se pudo abrir la vista de impresión. Pulsa PDF / Imprimir y permite la ventana emergente.',
+    pdf_empty: 'Aún no hay respuesta para descargar', pdf_busy: 'Espera a que termine la generación', pdf_downloaded: 'PDF descargado', pdf_download_fail: 'No se pudo descargar el PDF',
     copied: 'Código copiado', mcp_disabled: 'MCP desactivado. Gemini funciona sin herramientas.', mcp_error: 'No se pudieron obtener herramientas',
     waiting: 'Esperando a Gemini...', generating: 'Generando interfaz...', analyzing: 'Analizando solicitud...',
     done_ok: 'Interfaz generada correctamente', resp_ok: 'Respuesta recibida', failed: 'Generación fallida',
@@ -70,6 +73,8 @@ const I18N = {
     wipe_title: 'Delete saved data?', wipe_will_delete: 'Will delete:', w_session: 'session', w_datasets: 'datasets', w_prefs: 'preferences',
     imp_tag: 'important', wiped_ok: 'Data deleted',
     session_cleared: 'Session cleared', no_export: 'No interface to export yet', exported: 'Interface exported',
+    print_pdf: 'PDF / Print', print_empty: 'No response to print yet', print_busy: 'Wait for generation to finish', print_blocked: 'Could not open the print view. Click PDF / Print and allow the popup.',
+    pdf_empty: 'No response to download yet', pdf_busy: 'Wait for generation to finish', pdf_downloaded: 'PDF downloaded', pdf_download_fail: 'Could not download the PDF',
     copied: 'Code copied to clipboard', mcp_disabled: 'MCP is disabled. Gemini works without tools.', mcp_error: 'Could not fetch tools',
     waiting: 'Waiting for Gemini...', generating: 'Generating interface...', analyzing: 'Analyzing request...',
     done_ok: 'Interface generated successfully', resp_ok: 'Response received', failed: 'Generation failed',
@@ -255,6 +260,38 @@ $('btn-export').addEventListener('click', (e) => {
   a.href = url; a.download = 'glintmesh-interface-' + Date.now() + '.html'; a.click();
   URL.revokeObjectURL(url); showToast(t('exported'), 'success');
 });
+
+function printResponse() {
+  if (state.isGenerating) { showToast(t('print_busy'), 'info'); return; }
+  const text = agentBubble.style.display === 'none' ? '' : agentBubbleText.textContent.trim();
+  if (!state.generatedHTML && !text) { showToast(t('print_empty'), 'info'); return; }
+  if (!openPrintView({ html: state.generatedHTML, text, lang })) showToast(t('print_blocked'), 'error');
+}
+$('btn-print-pdf').addEventListener('click', printResponse);
+
+async function downloadPdf() {
+  if (state.isGenerating) { showToast(t('pdf_busy'), 'info'); return; }
+  if (!state.generatedHTML) { showToast(t('pdf_empty'), 'info'); return; }
+  try {
+    const response = await fetch('/api/pdf', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ html: state.generatedHTML }),
+    });
+    if (!response.ok) throw new Error('download failed (' + response.status + ')');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const disp = response.headers.get('content-disposition') || '';
+    const match = /filename="([^"]+)"/.exec(disp);
+    a.href = url;
+    a.download = match ? match[1] : 'glintmesh-interface-' + Date.now() + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast(t('pdf_downloaded'), 'success');
+  } catch (e) { showToast(t('pdf_download_fail'), 'error'); }
+}
 
 // ─── Tools drawer: list connected MCPs, not just count ──────────────────────
 const drawer = $('tools-drawer'), overlay = $('tools-overlay');
@@ -739,8 +776,9 @@ $('btn-share').addEventListener('click', async () => {
 });
 
 // ─── Submit ─────────────────────────────────────────────────────────────────
-async function handleSubmit() {
-  const message = chatTextarea.value.trim();
+async function handleSubmit(forcedMessage = null, displayLabel = null) {
+  const hasForcedMessage = typeof forcedMessage === 'string';
+  const message = (hasForcedMessage ? forcedMessage : chatTextarea.value).trim();
   if (!message || state.isGenerating) return;
   if (message.length > 500) return;
   try { recog && listening && recog.stop(); } catch (e) {}
@@ -756,7 +794,8 @@ async function handleSubmit() {
   welcomeState.style.display = 'none'; generatedWrapper.classList.add('visible');
   // user bubble: show what was sent (text + images, Gemini style)
   const userBubble = $('user-bubble'), userBubbleText = $('user-bubble-text'), userBubbleImgs = $('user-bubble-imgs');
-  userBubble.style.display = 'flex'; userBubbleText.textContent = message;
+  userBubble.style.display = 'flex';
+  userBubbleText.textContent = typeof displayLabel === 'string' && displayLabel.trim() ? displayLabel.trim() : message;
   userBubbleImgs.innerHTML = '';
   sentImages.forEach((im) => {
     const img = document.createElement('img');
@@ -811,6 +850,30 @@ async function handleSubmit() {
     if (state.controller === controller) { state.controller = null; state.isGenerating = false; sendBtn.disabled = false; progressBar.style.display = 'none'; }
   }
 }
+
+// ─── A2UI feedback loop: acciones de la interfaz generada vuelven al agente ──
+window.addEventListener('message', (event) => {
+  if (event.source !== previewIframe.contentWindow) return;
+  const data = event.data;
+  if (!data || typeof data !== 'object' || data.glintmesh !== true) return;
+  if (state.isGenerating) return;
+  if (data.action === 'print_pdf' || data.action === 'export_pdf') {
+    printResponse();
+    return;
+  }
+  if (data.action === 'download_pdf') {
+    downloadPdf();
+    return;
+  }
+
+  const label = String(data.label || data.action || 'Acción seleccionada').slice(0, 200);
+  let payloadText = '{}';
+  try {
+    payloadText = JSON.stringify(data.payload || {}).slice(0, 260);
+  } catch (e) {}
+  const message = ('[Acción de UI] ' + label + '. Datos: ' + payloadText).slice(0, 500);
+  handleSubmit(message, label);
+});
 
 /* ─── Real A2UI: native components rendered from MCP data (no model code runs) ─── */
 function esc(v) {
@@ -1339,7 +1402,7 @@ $('btn-retry').addEventListener('click', () => {
     chatTextarea.value = p.message;
     chatTextarea.dispatchEvent(new Event('input'));
   }
-  handleSubmit(true);
+  handleSubmit();
 });
 
 // ─── 4. Compose: combina N superficies A2UI en 1 dashboard (sin cuota) ──────

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import AsyncIterator
@@ -13,7 +14,7 @@ from typing import AsyncIterator
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from google import genai
 from google.genai import types
@@ -106,6 +107,35 @@ GROUNDING RULES (mandatory, highest priority):
   call mongo_list_collections (omit database to use the server default), then
   mongo_get_schema / mongo_find. Do not ask the user for collection names you
   can discover yourself with one tool call.
+INTERACTIVE ACTIONS (closes the A2UI loop — mandatory when the interface has a
+choice, confirmation, or next-step button):
+- Every interactive control that should continue the conversation MUST call, on
+  click, exactly this and nothing else:
+  window.parent.postMessage({glintmesh:true, action:"<short_id>",
+    label:"<human label in the user's language>", payload:{...}}, "*")
+- Never use <form> submit, never navigate, never call fetch()/XMLHttpRequest
+  yourself: the parent page owns all network access.
+- payload must contain only real values already shown in this interface
+  (taken from the tool results or the user's data), never invented ones.
+Example — a payment-plan button:
+<button onclick='window.parent.postMessage({glintmesh:true,
+  action:"apply_plan", label:"Aplicar plan de 12 meses (CAT 32.4%)",
+  payload:{months:12, monthly_payment:1690, cat:32.4, balance:18400}}, "*")'>
+  Aplicar plan →
+</button>
+When you receive a follow-up message that starts with "[Acción de UI]", it means
+the user just clicked one of these buttons in the previous interface: treat the
+payload as ground truth and build the next screen (confirmation, next step, or
+updated dashboard) from it — do not ask the user to repeat information already
+in the payload.
+PDF AND PRINT (handled by the parent page, without another agent call):
+- To save the current response as PDF, use a button that only calls
+  window.parent.postMessage({glintmesh:true, action:"download_pdf",
+    label:"Guardar PDF", payload:{}}, "*"). Use action:"print_pdf" to print.
+- Localize the label to the user's language. The parent opens the browser print
+  dialog: the user chooses a printer or "Save as PDF". Do not claim a file was saved.
+- Never call window.print(), create download links, or load PDF libraries inside
+  the generated iframe. Existing responses can use GlintMesh's PDF / Print button.
 When MCP tools are used, structure the visible output as A2UI-style surfaces (cards, charts, tables).
 """
 
@@ -1166,6 +1196,189 @@ class ShareRequest(BaseModel):
     html: str = Field(min_length=100, max_length=500000)
 
 
+PDF_MAX_HTML_BYTES = 2 * 1024 * 1024
+
+# Allowlist espejo de static/print.mjs (PRINT_TAGS) + img/u/a para el PDF.
+# Todo lo demás se elimina o se desempaqueta (solo texto). Nunca se ejecuta JS:
+# fpdf2 no interpreta scripts y el sanitizador elimina el contenido activo.
+_PDF_ALLOWED_TAGS = frozenset({
+    "div", "section", "article", "main", "header", "footer", "p", "span",
+    "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li",
+    "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption",
+    "strong", "b", "em", "i", "u", "small", "dl", "dt", "dd",
+    "hr", "br", "pre", "code", "blockquote", "figure", "figcaption",
+    "img", "a",
+})
+# Subárboles que se descartan por completo (contenido activo o no imprimible).
+_PDF_DROP_SUBTREE = frozenset({
+    "script", "style", "iframe", "object", "embed", "link", "meta", "base",
+    "noscript", "template", "button", "form", "input", "select", "textarea",
+    "svg", "video", "audio", "canvas", "picture", "source", "track",
+})
+_PDF_IMG_SRC_RE = re.compile(
+    r"^data:image/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$"
+)
+
+
+class PdfRequest(BaseModel):
+    html: str = Field(min_length=1, max_length=2000000)
+
+    @field_validator("html", mode="before")
+    @classmethod
+    def check_html(cls, value):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("HTML is empty")
+        if len(value.encode("utf-8", "ignore")) > PDF_MAX_HTML_BYTES:
+            raise ValueError("HTML too large")
+        return value
+
+
+def _sanitize_html_for_pdf(html: str) -> str:
+    """Reconstruye HTML seguro con allowlist (sin atributos/URLs externas).
+
+    Refleja las validaciones de static/print.mjs: solo etiquetas estructurales,
+    texto como nodos de texto (nunca interpretado) e imágenes PNG/JPEG
+    embebidas como data-URL. Bloquea rutas de archivo y URLs remotas.
+    """
+    from html.parser import HTMLParser
+
+    class _Sanitizer(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.parts: list[str] = []
+            self.drop_depth = 0
+            self.nodes = 0
+            self.chars = 0
+            self.has_content = False
+
+        def _bail(self, msg: str):
+            raise ValueError(msg)
+
+        def handle_starttag(self, tag, attrs):
+            self.nodes += 1
+            if self.nodes > 20000:
+                self._bail("PDF content too large")
+            tag = (tag or "").lower()
+            if self.drop_depth:
+                if tag in _PDF_DROP_SUBTREE:
+                    self.drop_depth += 1
+                return
+            if tag in _PDF_DROP_SUBTREE:
+                # canvas/gráficos sin snapshot se sustituyen por un aviso.
+                if tag in {"canvas", "svg", "video"}:
+                    self.parts.append("<p>[Gr\u00e1fico no disponible en PDF]</p>")
+                    self.has_content = True
+                self.drop_depth = 1
+                return
+            if tag == "img":
+                src = ""
+                alt = ""
+                for name, val in (attrs or []):
+                    if name == "src" and isinstance(val, str):
+                        src = val.strip()
+                    elif name == "alt" and isinstance(val, str):
+                        alt = val.strip()[:200]
+                if (
+                    src
+                    and len(src) <= 12000000
+                    and _PDF_IMG_SRC_RE.match(src)
+                ):
+                    self.chars += len(src)
+                    if self.chars > 16000000:
+                        self._bail("PDF content too large")
+                    safe_alt = alt.replace('"', "").replace("<", "").replace(">", "")
+                    self.parts.append(f'<img src="{src}" alt="{safe_alt}">')
+                    self.has_content = True
+                else:
+                    self.parts.append("<p>[Imagen no disponible en PDF]</p>")
+                    self.has_content = True
+                return
+            if tag not in _PDF_ALLOWED_TAGS:
+                return
+            if tag in {"br", "hr"}:
+                self.parts.append(f"<{tag}>")
+                return
+            extra = ""
+            if tag in {"td", "th"}:
+                for name, val in (attrs or []):
+                    if name.lower() in {"colspan", "rowspan"}:
+                        try:
+                            num = int(str(val).strip())
+                        except (TypeError, ValueError):
+                            continue
+                        if 1 <= num <= 100:
+                            extra += f' {name.lower()}="{num}"'
+            # <a> se conserva solo como texto (sin href) para evitar javascript:.
+            self.parts.append(f"<{tag}{extra}>")
+            if tag in {"p", "li", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"}:
+                self.has_content = True
+
+        def handle_endtag(self, tag):
+            tag = (tag or "").lower()
+            if self.drop_depth:
+                if tag in _PDF_DROP_SUBTREE:
+                    self.drop_depth -= 1
+                return
+            if tag in _PDF_ALLOWED_TAGS and tag not in {"br", "hr", "img"}:
+                self.parts.append(f"</{tag}>")
+
+        def handle_data(self, data):
+            if self.drop_depth or not data:
+                return
+            # Solo texto visible; el parser ya resolvió entidades.
+            if not data.strip():
+                return
+            self.chars += len(data)
+            if self.chars > 2000000:
+                self._bail("PDF content too large")
+            safe = (
+                data.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+            )
+            self.parts.append(safe)
+            self.has_content = True
+
+    parser = _Sanitizer()
+    parser.feed(html[:PDF_MAX_HTML_BYTES + 1024])
+    parser.close()
+    if parser.drop_depth:
+        pass
+    clean = "".join(parser.parts).strip()
+    if not clean or not parser.has_content:
+        raise ValueError("HTML contains no printable content")
+    return clean
+
+
+def _pdf_image_map(src: str) -> str:
+    """Backstop: fpdf2 solo puede resolver data-URLs embebidas.
+
+    Cualquier ruta de archivo o URL remota se rechaza aquí aunque el
+    sanitizador ya las haya eliminado antes.
+    """
+    if isinstance(src, str) and _PDF_IMG_SRC_RE.match(src.strip()):
+        return src
+    raise ValueError("External images are not allowed")
+
+
+def _build_pdf_bytes(sanitized_html: str) -> bytes:
+    from fpdf import FPDF
+
+    pdf = FPDF(format="A4", unit="mm")
+    pdf.set_margins(14, 14, 14)
+    pdf.set_auto_page_break(True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=11)
+    pdf.write_html(
+        f"<body>{sanitized_html}</body>",
+        image_map=_pdf_image_map,
+        table_line_separators=True,
+        warn_on_tags_not_matching=False,
+    )
+    out = pdf.output()
+    return bytes(out)
+
+
 @app.post("/api/tool-call")
 async def direct_tool_call(body: ToolCallRequest):
     """Re-run a single MCP tool without Gemini (free live refresh for A2UI surfaces)."""
@@ -1200,6 +1413,41 @@ async def serve_share(share_id: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Not found.")
     return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+@app.post("/api/pdf")
+async def export_pdf(body: PdfRequest):
+    """Genera un PDF A4 descargable a partir del HTML ya generado.
+
+    No ejecuta JavaScript ni resuelve URLs/rutas del cliente: el HTML se
+    sanitiza con allowlist (como print.mjs) y fpdf2 solo incrusta data-URLs.
+    La generación pesada corre en un hilo para no bloquear el event loop.
+    """
+    raw = body.html if isinstance(body.html, str) else ""
+    if len(raw.encode("utf-8", "ignore")) > PDF_MAX_HTML_BYTES:
+        raise HTTPException(status_code=413, detail="HTML too large (max 2 MB).")
+    try:
+        sanitized = _sanitize_html_for_pdf(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc) or "Invalid HTML.") from exc
+    try:
+        pdf_bytes = await asyncio.wait_for(
+            asyncio.to_thread(_build_pdf_bytes, sanitized), timeout=25
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="PDF generation timed out.") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="PDF engine failed.") from exc
+    if not pdf_bytes or not pdf_bytes.startswith(b"%PDF"):
+        raise HTTPException(status_code=500, detail="PDF engine failed.")
+    filename = f"glintmesh-interface-{int(time.time() * 1000)}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.delete("/api/datasets/{dataset_id}")
