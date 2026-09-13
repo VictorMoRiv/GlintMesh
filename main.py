@@ -275,10 +275,16 @@ def _result_is_error(result) -> bool:
     return bool(getattr(result, "isError", getattr(result, "is_error", False)))
 
 
-UPLOAD_DIR = BASE_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
-SHARE_DIR = BASE_DIR / "shares"
-SHARE_DIR.mkdir(exist_ok=True)
+# Vercel serverless usa un filesystem de solo lectura excepto /tmp.
+_IS_SERVERLESS = bool(os.environ.get("VERCEL"))
+_WRITE_BASE = Path("/tmp") if _IS_SERVERLESS else BASE_DIR
+UPLOAD_DIR = _WRITE_BASE / "uploads"
+SHARE_DIR = _WRITE_BASE / "shares"
+try:
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    SHARE_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 DATASET_EXTS = {".csv", ".json"}
 DATASET_MAX_BYTES = 2 * 1024 * 1024
 DATASET_MAX_ROWS = 200
@@ -1134,7 +1140,7 @@ async def generate_interface(body: GenerateRequest, request: Request):
     })
 
 
-USERS_FILE = BASE_DIR / "users.json"
+USERS_FILE = _WRITE_BASE / "users.json"
 
 
 class AuthBody(BaseModel):
