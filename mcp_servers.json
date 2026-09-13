@@ -2,6 +2,8 @@
   "servers": [
     { "name": "demo", "script": "mcp_server.py", "label": "Demo (simulated data)" },
     { "name": "live", "script": "mcp_yahoo.py", "label": "Live market (Yahoo Finance)" },
-    { "name": "ecb", "script": "mcp_ecb.py", "label": "ECB official rates" }
+    { "name": "ecb", "script": "mcp_ecb.py", "label": "ECB official rates" },
+    { "name": "mongodb", "script": "mcp_mongodb.py", "label": "MongoDB",
+      "env_vars": ["MONGODB_URI", "MONGODB_DATABASE"] }
   ]
 }

@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 from typing import AsyncIterator
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -24,6 +25,12 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_API_KEYS = [k.strip() for k in os.getenv("GEMINI_API_KEYS", GEMINI_API_KEY).split(",") if k.strip()]
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
 GEMINI_MODELS = [m.strip() for m in os.getenv("GEMINI_MODELS", GEMINI_MODEL).split(",") if m.strip()] or [GEMINI_MODEL]
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip() or "deepseek-chat"
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip().rstrip("/")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto").strip().lower() or "auto"
+if LLM_PROVIDER not in {"gemini", "deepseek", "auto"}:
+    LLM_PROVIDER = "auto"
 MCP_ENABLED = os.getenv("MCP_ENABLED", "false").lower() in {"true", "1", "yes"}
 
 app = FastAPI(title="GlintMesh", version="2.0.0")
@@ -62,6 +69,7 @@ class GenerateRequest(BaseModel):
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
     mode: str = Field(default="full", pattern="^(full|data)$")
     images: list[ImageAttachment] = Field(default_factory=list, max_length=3)
+    provider: str | None = Field(default=None, pattern="^(gemini|deepseek|auto)$")
 
     @field_validator("message", mode="before")
     @classmethod
@@ -89,13 +97,30 @@ class GenerateRequest(BaseModel):
     def check_model(cls, value):
         if value is None:
             return None
-        if isinstance(value, str) and value.strip() in GEMINI_MODELS:
+        allowed = set(GEMINI_MODELS) | {DEEPSEEK_MODEL, "deepseek-chat", "deepseek-reasoner"}
+        if isinstance(value, str) and value.strip() in allowed:
             return value.strip()
         raise ValueError("Unknown model")
 
 
+def sanitize_secret(text: str) -> str:
+    if not isinstance(text, str) or not text:
+        return ""
+    all_keys = [DEEPSEEK_API_KEY, GEMINI_API_KEY] + GEMINI_API_KEYS
+    for k in all_keys:
+        if k and len(k) >= 4:
+            text = text.replace(k, "[REDACTED]")
+    return text
+
+
 def event(kind: str, **payload) -> str:
-    return f"data: {json.dumps({'type': kind, **payload}, ensure_ascii=False)}\n\n"
+    clean = {}
+    for k, v in payload.items():
+        if isinstance(v, str):
+            clean[k] = sanitize_secret(v)
+        else:
+            clean[k] = v
+    return f"data: {json.dumps({'type': kind, **clean}, ensure_ascii=False)}\n\n"
 
 
 def _tool_schema(tool):
@@ -218,7 +243,12 @@ class MCPFinancialClient:
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
-        params = StdioServerParameters(command=sys.executable, args=[str(BASE_DIR / server["script"])])
+        # The SDK filters inherited environment variables. Forward only the names
+        # explicitly requested by each server; values never enter tool metadata.
+        env = {name: os.environ[name] for name in server.get("env_vars", []) if name in os.environ}
+        params = StdioServerParameters(
+            command=sys.executable, args=[str(BASE_DIR / server["script"])], env=env,
+        )
         async with asyncio.timeout(30):
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
@@ -283,24 +313,372 @@ def build_gemini_tools(mcp_tools):
     return [types.Tool(function_declarations=declarations)] if declarations else []
 
 
-def gemini_error_message(error):
-    code = getattr(error, "code", None)
+def _extract_status_code(error) -> int | None:
+    code = getattr(error, "code", None) or getattr(error, "status_code", None)
+    if isinstance(code, int):
+        return code
+    resp = getattr(error, "response", None)
+    if resp is not None:
+        sc = getattr(resp, "status_code", None)
+        if isinstance(sc, int):
+            return sc
+    m = re.search(r"\b(401|403|404|429|500|502|503|504)\b", str(error))
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            pass
+    return None
+
+
+def gemini_error_message(error, lang="en"):
+    code = _extract_status_code(error)
     if code in (401, 403):
+        if lang == "es":
+            return "Autenticación fallida. Revisa la clave de API y sus permisos en el archivo .env."
         return "Gemini authentication failed. Check the server API key and its permissions."
     if code == 429:
-        return "Gemini usage limit reached. Wait a moment and try again."
+        # Read structured quota identifiers, never forward raw SDK error text.
+        payload = getattr(error, "details", None)
+        if isinstance(payload, dict):
+            payload = payload.get("error", payload)
+        details = payload.get("details", []) if isinstance(payload, dict) else []
+        daily = any(
+            "PerDay" in str(violation.get("quotaId", ""))
+            for detail in (details if isinstance(details, list) else []) if isinstance(detail, dict)
+            for violation in (detail.get("violations") or []) if isinstance(violation, dict)
+        )
+        if daily:
+            if lang == "es":
+                return ("Se alcanzó la cuota diaria de Gemini para este proyecto y modelo. "
+                        "Se restablece a medianoche, hora del Pacífico. Cambiar la clave del mismo "
+                        "proyecto no renueva la cuota. Revisa tus límites y facturación en Google AI Studio.")
+            return ("Gemini's daily quota for this project and model has been reached. "
+                    "It resets at midnight Pacific time. Changing keys within the same project "
+                    "does not renew the quota. Check your limits and billing in Google AI Studio.")
+        if lang == "es":
+            return "Cuota agotada o límite de uso alcanzado. Revisa las cuotas del proyecto en Google AI Studio."
+        return "Gemini usage limit reached. Check the project's quotas in Google AI Studio."
     if code == 404:
+        if lang == "es":
+            return "Modelo no disponible. El modelo configurado de Gemini no está disponible. Revisa GEMINI_MODEL en el servidor."
         return "The configured Gemini model is unavailable. Check GEMINI_MODEL on the server."
     if code in (500, 502, 503, 504):
+        if lang == "es":
+            return "Error temporal del servicio. Gemini no está disponible temporalmente. Inténtalo de nuevo más tarde."
         return "Gemini is temporarily unavailable. Please try again shortly."
+    if lang == "es":
+        return "No se pudo completar la respuesta de Gemini. Revisa la conexión del servidor e inténtalo de nuevo."
     return "Could not complete the Gemini response. Check the server connection and try again."
+
+
+def deepseek_error_message(error, lang="es"):
+    code = _extract_status_code(error)
+    if code in (401, 403):
+        if lang == "es":
+            return "Autenticación fallida. Revisa la clave de API y sus permisos en el archivo .env."
+        return "DeepSeek authentication failed. Check DEEPSEEK_API_KEY and its permissions."
+    if code == 429:
+        if lang == "es":
+            return "Cuota agotada o límite de uso alcanzado. Revisa tu saldo y facturación en DeepSeek."
+        return "DeepSeek quota exhausted or usage limit reached. Check your balance and billing."
+    if code == 404:
+        if lang == "es":
+            return "Modelo no disponible. El modelo configurado de DeepSeek no está disponible. Revisa DEEPSEEK_MODEL en el archivo .env."
+        return "The configured DeepSeek model is unavailable. Check DEEPSEEK_MODEL on the server."
+    if code in (500, 502, 503, 504):
+        if lang == "es":
+            return "Error temporal del servicio. DeepSeek no está disponible temporalmente. Inténtalo de nuevo más tarde."
+        return "DeepSeek is temporarily unavailable. Please try again shortly."
+    if isinstance(error, (httpx.TimeoutException, TimeoutError)):
+        if lang == "es":
+            return "Error temporal del servicio. Tiempo de espera agotado al conectar con DeepSeek."
+        return "DeepSeek request timed out. Please try again."
+    if isinstance(error, httpx.RequestError):
+        if lang == "es":
+            return "Error temporal del servicio. No se pudo conectar con DeepSeek."
+        return "Could not connect to DeepSeek. Check network connection."
+    if lang == "es":
+        return "No se pudo completar la respuesta de DeepSeek. Inténtalo de nuevo."
+    return "Could not complete the DeepSeek response. Check the connection and try again."
+
+
+def missing_key_error_message(provider: str, lang: str = "es") -> str:
+    if provider == "gemini":
+        return (
+            "Clave de API ausente. Configura GEMINI_API_KEY en el archivo .env."
+            if lang == "es"
+            else "Missing API key. Set GEMINI_API_KEY in the server .env file before generating."
+        )
+    if provider == "deepseek":
+        return (
+            "Clave de API ausente. Configura DEEPSEEK_API_KEY en el archivo .env."
+            if lang == "es"
+            else "Missing API key. Set DEEPSEEK_API_KEY in the server .env file before generating."
+        )
+    return (
+        "Clave de API ausente. Configura GEMINI_API_KEY o DEEPSEEK_API_KEY en el archivo .env."
+        if lang == "es"
+        else "Missing API key. Set GEMINI_API_KEY or DEEPSEEK_API_KEY in the server .env file before generating."
+    )
+
+
+class DeepSeekAPIError(Exception):
+    def __init__(self, status_code: int, message: str = ""):
+        self.status_code = status_code
+        self.code = status_code
+        super().__init__(message)
+
+
+def build_openai_tools(mcp_tools):
+    tools = []
+    for tool in (mcp_tools or []):
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description or tool.name,
+                "parameters": _tool_schema(tool) or {"type": "object", "properties": {}},
+            },
+        })
+    return tools
+
+
+async def run_deepseek_stream(
+    user_message: str,
+    lang: str = "es",
+    context: str | None = None,
+    dataset_text: str | None = None,
+    style_prompt: str | None = None,
+    model_choice: str | None = None,
+    temperature: float | None = None,
+    mode: str = "full",
+    images: list | None = None,
+    mcp_tools: list | None = None,
+) -> AsyncIterator[str]:
+    yield event("status", content="Conectando con DeepSeek..." if lang == "es" else "Connecting to DeepSeek...")
+
+    api_key = DEEPSEEK_API_KEY
+    if not api_key:
+        yield event("error", content=missing_key_error_message("deepseek", lang))
+        return
+
+    model = model_choice if (model_choice and model_choice.startswith("deepseek")) else DEEPSEEK_MODEL
+    allowed_tools = {tool.name for tool in (mcp_tools or [])}
+    openai_tools = build_openai_tools(mcp_tools)
+
+    first_text = user_message
+    n_images = len(images or [])
+    if n_images:
+        first_text += (
+            f"\n[User attached {n_images} image(s). IMAGE RULES: accept ONLY financial charts, graphs, "
+            "tables or dashboards. Analyze them visually FIRST and reference what you see. "
+            "If an image is NOT a financial graphic (meme, animal, person, landscape, random photo), "
+            "do NOT break and do NOT output any HTML block: reply in 1-2 sentences explaining you can "
+            "only build interfaces from financial charts/graphics, and ask for a proper one.]"
+        )
+        yield event("status", content=f"Analizando {n_images} imagen(es)..." if lang == "es" else f"Analyzing {n_images} image(s)...")
+
+    lang_note = "Reply in Spanish." if lang == "es" else "Reply in English."
+    system_instruction = SYSTEM_PROMPT + "\n" + lang_note
+    if style_prompt:
+        system_instruction += (
+            "\nUser style preference for all generated interfaces "
+            "(takes precedence over the default visual style): " + style_prompt[:800]
+        )
+    if mode == "data":
+        system_instruction += (
+            "\nData-only mode: call the needed MCP tools, then reply with a 1-2 sentence "
+            "summary only. Do NOT output any HTML block."
+        )
+
+    messages = [
+        {"role": "system", "content": system_instruction},
+        {"role": "user", "content": first_text},
+    ]
+    if context:
+        messages.append({
+            "role": "user",
+            "content": "Previous turn summary for continuity (adapt the new interface to it when relevant): " + context[:1500],
+        })
+    if dataset_text:
+        messages.append({"role": "user", "content": dataset_text})
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as http_client:
+            for _ in range(6):
+                has_text = False
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "stream": True,
+                    "temperature": 0.7 if temperature is None else temperature,
+                }
+                if openai_tools:
+                    payload["tools"] = openai_tools
+                    payload["tool_choice"] = "auto"
+
+                tool_calls_dict = {}
+                accumulated_text = ""
+                finish_reason = None
+
+                async with http_client.stream(
+                    "POST",
+                    f"{DEEPSEEK_BASE_URL}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                ) as resp:
+                    if resp.status_code != 200:
+                        await resp.aread()
+                        raise DeepSeekAPIError(status_code=resp.status_code, message=f"DeepSeek returned {resp.status_code}")
+
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        line = line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
+
+                        choices = chunk.get("choices") or []
+                        if not choices:
+                            continue
+                        choice = choices[0]
+                        if choice.get("finish_reason"):
+                            finish_reason = choice["finish_reason"]
+
+                        delta = choice.get("delta") or {}
+                        content = delta.get("content")
+                        if content:
+                            has_text = True
+                            accumulated_text += content
+                            yield event("text_chunk", content=content)
+
+                        for tc in delta.get("tool_calls") or []:
+                            idx = tc.get("index", 0)
+                            if idx not in tool_calls_dict:
+                                tool_calls_dict[idx] = {
+                                    "id": tc.get("id") or f"call_{idx}",
+                                    "name": (tc.get("function") or {}).get("name") or "",
+                                    "arguments": (tc.get("function") or {}).get("arguments") or "",
+                                }
+                            else:
+                                if tc.get("id"):
+                                    tool_calls_dict[idx]["id"] = tc["id"]
+                                fn = tc.get("function") or {}
+                                if fn.get("name"):
+                                    tool_calls_dict[idx]["name"] += fn["name"]
+                                if fn.get("arguments"):
+                                    tool_calls_dict[idx]["arguments"] += fn["arguments"]
+
+                if tool_calls_dict:
+                    sorted_calls = [tool_calls_dict[k] for k in sorted(tool_calls_dict.keys())]
+                    assistant_msg = {
+                        "role": "assistant",
+                        "content": accumulated_text or None,
+                        "tool_calls": [
+                            {
+                                "id": tc["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": tc["name"],
+                                    "arguments": tc["arguments"],
+                                },
+                            }
+                            for tc in sorted_calls
+                        ],
+                    }
+                    messages.append(assistant_msg)
+
+                    for tc in sorted_calls:
+                        fn_name = tc["name"]
+                        try:
+                            fn_args = json.loads(tc["arguments"]) if tc["arguments"] else {}
+                        except Exception:
+                            fn_args = {}
+
+                        yield event(
+                            "tool_call",
+                            content=f"Fetching {fn_name.replace('_', ' ')}...",
+                            tool=fn_name,
+                            args=fn_args,
+                        )
+                        try:
+                            if fn_name not in allowed_tools:
+                                raise ValueError("Unknown tool")
+                            data = await mcp_client.call_tool(fn_name, fn_args)
+                            yield event("tool_result", tool=fn_name, data=data)
+                            res_str = json.dumps(data, ensure_ascii=False)
+                        except Exception:
+                            err_res = {"error": "The MCP tool could not complete the request."}
+                            yield event("tool_result", tool=fn_name, data=err_res, failed=True)
+                            res_str = json.dumps(err_res, ensure_ascii=False)
+
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": res_str,
+                        })
+
+                    yield event(
+                        "status",
+                        content="Generando interfaz con los resultados de las herramientas..."
+                        if lang == "es"
+                        else "Generating interface from tool results...",
+                    )
+                    continue
+
+                if finish_reason and finish_reason not in ("stop", "length", None):
+                    yield event(
+                        "error",
+                        content="DeepSeek no pudo finalizar esta respuesta. Intenta con una solicitud diferente."
+                        if lang == "es"
+                        else "DeepSeek could not finish this response. Try a shorter or different request.",
+                    )
+                    return
+
+                if has_text:
+                    yield event("done", content="Response complete")
+                    return
+                else:
+                    yield event(
+                        "error",
+                        content="DeepSeek no devolvió texto. Intenta con una solicitud diferente."
+                        if lang == "es"
+                        else "DeepSeek returned no text. Try a different request.",
+                    )
+                    return
+
+            yield event(
+                "error",
+                content="Límite de llamadas a herramientas alcanzado. Por favor intenta con una solicitud más simple."
+                if lang == "es"
+                else "Tool call limit reached. Please try a simpler request.",
+            )
+    except Exception as error:
+        yield event("error", content=deepseek_error_message(error, lang))
 
 
 async def run_agent_stream(user_message: str, lang: str = "es", context: str | None = None,
                      dataset_text: str | None = None, style_prompt: str | None = None,
                      model_choice: str | None = None, temperature: float | None = None,
-                     mode: str = "full", images: list | None = None) -> AsyncIterator[str]:
-    yield event("status", content="Connecting to Gemini...")
+                     mode: str = "full", images: list | None = None,
+                     provider: str | None = None) -> AsyncIterator[str]:
+    chosen_provider = (provider or LLM_PROVIDER or "auto").strip().lower()
+    if chosen_provider not in {"gemini", "deepseek", "auto"}:
+        chosen_provider = "auto"
+
     mcp_tools = []
     if MCP_ENABLED:
         try:
@@ -308,6 +686,40 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
         except Exception:
             yield event("error", content="MCP tools are unavailable. Check the MCP server or set MCP_ENABLED=false.")
             return
+
+    if chosen_provider == "deepseek":
+        async for chunk in run_deepseek_stream(
+            user_message=user_message,
+            lang=lang,
+            context=context,
+            dataset_text=dataset_text,
+            style_prompt=style_prompt,
+            model_choice=model_choice,
+            temperature=temperature,
+            mode=mode,
+            images=images,
+            mcp_tools=mcp_tools,
+        ):
+            yield chunk
+        return
+
+    if chosen_provider == "auto" and not GEMINI_API_KEYS and DEEPSEEK_API_KEY:
+        async for chunk in run_deepseek_stream(
+            user_message=user_message,
+            lang=lang,
+            context=context,
+            dataset_text=dataset_text,
+            style_prompt=style_prompt,
+            model_choice=model_choice,
+            temperature=temperature,
+            mode=mode,
+            images=images,
+            mcp_tools=mcp_tools,
+        ):
+            yield chunk
+        return
+
+    yield event("status", content="Connecting to Gemini...")
 
     first_parts: list = [types.Part(text=user_message)]
     n_images = 0
@@ -354,9 +766,11 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
     )
     allowed_tools = {tool.name for tool in mcp_tools}
     initial_contents = list(contents)
-    preferred = [model_choice] if model_choice else []
+    preferred = [model_choice] if model_choice and model_choice in GEMINI_MODELS else []
     ordered_models = preferred + [m for m in GEMINI_MODELS if m != model_choice]
     combos = [(key, model) for key in (GEMINI_API_KEYS or [GEMINI_API_KEY]) for model in ordered_models]
+
+    gemini_failed_error = None
     for combo_index, (api_key, model) in enumerate(combos):
         last_combo = combo_index == len(combos) - 1
         contents = list(initial_contents)
@@ -416,12 +830,40 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
                     contents.append(types.Content(role="user", parts=results))
                     yield event("status", content="Generating interface from tool results...")
                 yield event("error", content="Tool call limit reached. Please try a simpler request.")
+                return
         except Exception as error:
-            # Do not expose SDK exception strings: they may contain request details or credentials.
-            if getattr(error, "code", None) in (429, 404, 500, 502, 503, 504) and not last_combo:
+            code = _extract_status_code(error)
+            if code in (429, 404, 500, 502, 503, 504) and not last_combo:
                 yield event("status", content="Usage limit reached, trying another model...")
                 continue
-            yield event("error", content=gemini_error_message(error))
+            gemini_failed_error = error
+            break
+
+    if gemini_failed_error is not None:
+        code = _extract_status_code(gemini_failed_error)
+        FALLBACK_CODES = {429, 401, 403, 500, 502, 503}
+        if chosen_provider == "auto" and code in FALLBACK_CODES and DEEPSEEK_API_KEY:
+            yield event(
+                "status",
+                content="Gemini no disponible, cambiando a DeepSeek..."
+                if lang == "es"
+                else "Gemini unavailable, switching to DeepSeek...",
+            )
+            async for chunk in run_deepseek_stream(
+                user_message=user_message,
+                lang=lang,
+                context=context,
+                dataset_text=dataset_text,
+                style_prompt=style_prompt,
+                model_choice=model_choice,
+                temperature=temperature,
+                mode=mode,
+                images=images,
+                mcp_tools=mcp_tools,
+            ):
+                yield chunk
+            return
+        yield event("error", content=gemini_error_message(gemini_failed_error, lang))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -431,13 +873,31 @@ async def serve_index():
 
 @app.post("/api/generate")
 async def generate_interface(body: GenerateRequest):
-    if not GEMINI_API_KEYS:
-        raise HTTPException(status_code=503, detail="Set GEMINI_API_KEY in the server .env file before generating.")
+    provider = (body.provider or LLM_PROVIDER or "auto").strip().lower()
+    if provider not in {"gemini", "deepseek", "auto"}:
+        provider = "auto"
+
+    if provider == "gemini" and not GEMINI_API_KEYS:
+        raise HTTPException(
+            status_code=503,
+            detail=missing_key_error_message("gemini", body.lang),
+        )
+    if provider == "deepseek" and not DEEPSEEK_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail=missing_key_error_message("deepseek", body.lang),
+        )
+    if provider == "auto" and not GEMINI_API_KEYS and not DEEPSEEK_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail=missing_key_error_message("auto", body.lang),
+        )
+
     dataset_text = load_dataset_context(body.dataset_id) if body.dataset_id else None
     images = [img.model_dump() for img in (body.images or [])]
     return StreamingResponse(run_agent_stream(body.message, body.lang, body.context, dataset_text,
                                               body.style_prompt, body.model, body.temperature, body.mode,
-                                              images),
+                                              images, body.provider),
                              media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
@@ -663,7 +1123,9 @@ async def list_tools():
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "GlintMesh", "version": "2.0.0",
+            "llm_provider": LLM_PROVIDER,
             "gemini_configured": bool(GEMINI_API_KEYS), "model": GEMINI_MODEL, "models": GEMINI_MODELS,
+            "deepseek_configured": bool(DEEPSEEK_API_KEY), "deepseek_model": DEEPSEEK_MODEL,
             "mcp_enabled": MCP_ENABLED,
             "mcp_server": "finflow-financial-tools", "protocol": "A2UI over MCP"}
 

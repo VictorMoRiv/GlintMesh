@@ -46,10 +46,13 @@ class IntegrationTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(main.app)
         self.key = patch.object(main, "GEMINI_API_KEY", "test-key-never-public")
+        self.keys = patch.object(main, "GEMINI_API_KEYS", ["test-key-never-public"])
         self.mcp = patch.object(main, "MCP_ENABLED", False)
         self.key.start()
+        self.keys.start()
         self.mcp.start()
         self.addCleanup(self.key.stop)
+        self.addCleanup(self.keys.stop)
         self.addCleanup(self.mcp.stop)
 
     def generate(self, fake, message="Generate a KPI card"):
@@ -220,7 +223,7 @@ class MultiServerTests(unittest.IsolatedAsyncioTestCase):
         })
 
     async def test_config_lists_demo_and_live(self):
-        self.assertEqual([s["name"] for s in main.MCP_SERVERS], ["demo", "live", "ecb"])
+        self.assertEqual([s["name"] for s in main.MCP_SERVERS], ["demo", "live", "ecb", "mongodb"])
 
     async def test_routing_and_grouping(self):
         demo, live = self.demo_tool(), self.live_tool()
@@ -230,7 +233,7 @@ class MultiServerTests(unittest.IsolatedAsyncioTestCase):
                 return [demo] if server["name"] == "demo" else [live]
             return {"ok": server["name"]}
 
-        client = main.MCPFinancialClient()
+        client = main.MCPFinancialClient(servers=[s for s in main.MCP_SERVERS if s["name"] != "mongodb"])
         with patch.object(main.MCPFinancialClient, "_request", autospec=True, side_effect=fake_request):
             tools = await client.list_tools()
             self.assertEqual([t.name for t in tools], ["get_stock_quote", "get_live_quote"])
@@ -299,10 +302,13 @@ class DatasetTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(main.app)
         self.key = patch.object(main, "GEMINI_API_KEY", "test-key-never-public")
+        self.keys = patch.object(main, "GEMINI_API_KEYS", ["test-key-never-public"])
         self.mcp = patch.object(main, "MCP_ENABLED", False)
         self.key.start()
+        self.keys.start()
         self.mcp.start()
         self.addCleanup(self.key.stop)
+        self.addCleanup(self.keys.stop)
         self.addCleanup(self.mcp.stop)
         for path in main.UPLOAD_DIR.glob("test_*"):
             path.unlink(missing_ok=True)
