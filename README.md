@@ -66,6 +66,15 @@ Con MCP activado, el backend obtiene los esquemas, entrega las herramientas a Ge
 - `GET /api/tools`: herramientas disponibles; lista vacía cuando MCP está desactivado.
 - `GET /health`: modelo y presencia de configuración, sin exponer la clave. No realiza una llamada de validación a Gemini.
 
+## Live channel (WebSocket)
+
+Además del streaming SSE de `/api/generate`, hay un canal persistente `GET /ws/live` (nativo FastAPI, sin dependencias extra; `?token=` opcional para login):
+
+- **Ticks**: suscríbete con `{"op":"subscribe","symbols":["AAPL"],"watches":{"AAPL":{"above":200,"below":null}}}` y el servidor emite `tick` cada 15 s. La UI actualiza las tarjetas A2UI de cotización solas, sin gastar cuota de Gemini.
+- **Alertas**: cuando un precio cruza tu umbral recibes `alert` (toast ámbar + badge en la píldora LIVE). Configúralas con el botón **Alertas** del tab A2UI.
+- **Progreso cross-tab**: si generas en una pestaña, tus otras pestañas ven el progreso en vivo; al reconectar reciben el último estado.
+- **Sync**: `GET/PUT /api/prefs` guarda modelo, dataset, idioma y alertas por usuario (invitados usan `localStorage` + `BroadcastChannel` solo en ese navegador). Cambiar algo en una pestaña lo refleja en las demás.
+
 Los errores de validación usan HTTP 422; una clave sin configurar usa HTTP 503. Los errores ocurridos durante la generación usan el evento SSE `error` y no emiten `done`. La UI muestra el error con botón **Retry** en 1 clic, y el backend rota keys/modelos ante 429/404/5xx antes de fallar.
 
 ## Demo 3 minutos (ver DEMO-3MIN.md)
