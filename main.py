@@ -25,12 +25,53 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_API_KEYS = [k.strip() for k in os.getenv("GEMINI_API_KEYS", GEMINI_API_KEY).split(",") if k.strip()]
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
 GEMINI_MODELS = [m.strip() for m in os.getenv("GEMINI_MODELS", GEMINI_MODEL).split(",") if m.strip()] or [GEMINI_MODEL]
+# Secundario compatible OpenAI. Groq es el secundario activo; DeepSeek queda como alias legacy.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip() or "openai/gpt-oss-120b"
+GROQ_MODELS = [m.strip() for m in os.getenv("GROQ_MODELS", GROQ_MODEL).split(",") if m.strip()] or [GROQ_MODEL]
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip().rstrip("/") or "https://api.groq.com/openai/v1"
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip() or "deepseek-chat"
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip().rstrip("/")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto").strip().lower() or "auto"
-if LLM_PROVIDER not in {"gemini", "deepseek", "auto"}:
+if LLM_PROVIDER not in {"gemini", "groq", "deepseek", "auto"}:
     LLM_PROVIDER = "auto"
+
+
+def _is_secondary_model(name: str | None) -> bool:
+    """True si el modelo pertenece al secundario (Groq / legacy DeepSeek), no a Gemini."""
+    if not name or not isinstance(name, str):
+        return False
+    n = name.strip()
+    if n in {GROQ_MODEL, DEEPSEEK_MODEL, "deepseek-chat", "deepseek-reasoner"} or n in GROQ_MODELS:
+        return True
+    if n.startswith(("llama-", "qwen-", "openai/", "moonshotai/", "mixtral-", "gemma-", "deepseek")):
+        return True
+    return False
+
+
+def _secondary_llm_config(model_choice: str | None = None) -> dict:
+    """Resuelve el proveedor secundario: Groq primero, DeepSeek como legacy.
+
+    Devuelve dict con {label, api_key, model, base_url}.
+    NOTA: un model_choice de Gemini se ignora aquí — cada proveedor usa sus
+    propios modelos. Solo se respeta model_choice si es un modelo del secundario.
+    """
+    groq_key = GROQ_API_KEY
+    legacy_key = DEEPSEEK_API_KEY
+    api_key = groq_key or legacy_key
+    label = "Groq" if groq_key else "DeepSeek"
+    base_url = GROQ_BASE_URL if groq_key else (DEEPSEEK_BASE_URL or "https://api.deepseek.com")
+    default_model = GROQ_MODEL if groq_key else DEEPSEEK_MODEL
+    if _is_secondary_model(model_choice):
+        model = model_choice.strip()
+    else:
+        model = default_model
+    return {"label": label, "api_key": api_key, "model": model, "base_url": base_url}
+
+
+def _secondary_configured() -> bool:
+    return bool(GROQ_API_KEY or DEEPSEEK_API_KEY)
 MCP_ENABLED = os.getenv("MCP_ENABLED", "false").lower() in {"true", "1", "yes"}
 
 app = FastAPI(title="GlintMesh", version="2.0.0")
@@ -50,6 +91,21 @@ Never describe invented or simulated numbers as live data. When no data source i
 use clearly labeled sample data or the user's supplied values. Demo MCP tools return
 simulated demonstration data: label it as such. Tools named get_live_* return real
 market data via Yahoo Finance: present it as live. Do not invent a successful tool result.
+GROUNDING RULES (mandatory, highest priority):
+- Every name, number, date, amount, score, or fact you present as real MUST come
+  verbatim from an MCP tool result, the user's dataset, or the user's message.
+- Never invent clients, companies, amounts, scores, dates, or transactions. Never
+  fill in a missing field with a plausible value: if a requested field does not exist
+  in the tool results, explicitly say that field is not available in the database.
+- If a query returns zero documents, report "no records found" and STOP: do not
+  fabricate a replacement table.
+- Any example or placeholder value MUST be labeled "dato de ejemplo (no real)".
+- Before emitting a table built from MongoDB, re-check each cell against the tool
+  output you received; drop any row you cannot trace back to it.
+- When the user asks for stored data without naming a collection, DISCOVER it:
+  call mongo_list_collections (omit database to use the server default), then
+  mongo_get_schema / mongo_find. Do not ask the user for collection names you
+  can discover yourself with one tool call.
 When MCP tools are used, structure the visible output as A2UI-style surfaces (cards, charts, tables).
 """
 
@@ -69,7 +125,7 @@ class GenerateRequest(BaseModel):
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
     mode: str = Field(default="full", pattern="^(full|data)$")
     images: list[ImageAttachment] = Field(default_factory=list, max_length=3)
-    provider: str | None = Field(default=None, pattern="^(gemini|deepseek|auto)$")
+    provider: str | None = Field(default=None, pattern="^(gemini|groq|deepseek|auto)$")
 
     @field_validator("message", mode="before")
     @classmethod
@@ -97,8 +153,20 @@ class GenerateRequest(BaseModel):
     def check_model(cls, value):
         if value is None:
             return None
-        allowed = set(GEMINI_MODELS) | {DEEPSEEK_MODEL, "deepseek-chat", "deepseek-reasoner"}
+        allowed = (
+            set(GEMINI_MODELS)
+            | set(GROQ_MODELS)
+            | {GROQ_MODEL, DEEPSEEK_MODEL, "deepseek-chat", "deepseek-reasoner"}
+            | {"llama-3.3-70b-versatile", "llama-3.1-8b-instant",
+               "openai/gpt-oss-120b", "openai/gpt-oss-20b",
+               "qwen/qwen3-32b", "moonshotai/kimi-k2-instruct-0905"}
+        )
         if isinstance(value, str) and value.strip() in allowed:
+            return value.strip()
+        # Acepta prefijos típicos de Groq para no bloquear modelos nuevos.
+        if isinstance(value, str) and value.strip().startswith(
+            ("llama-", "qwen-", "openai/", "moonshotai/", "mixtral-", "gemma-", "deepseek")
+        ):
             return value.strip()
         raise ValueError("Unknown model")
 
@@ -106,7 +174,7 @@ class GenerateRequest(BaseModel):
 def sanitize_secret(text: str) -> str:
     if not isinstance(text, str) or not text:
         return ""
-    all_keys = [DEEPSEEK_API_KEY, GEMINI_API_KEY] + GEMINI_API_KEYS
+    all_keys = [GROQ_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY] + GEMINI_API_KEYS
     for k in all_keys:
         if k and len(k) >= 4:
             text = text.replace(k, "[REDACTED]")
@@ -331,6 +399,27 @@ def _extract_status_code(error) -> int | None:
     return None
 
 
+def _looks_like_quota_error(error) -> bool:
+    """Detecta errores de cuota/límite aunque el SDK no traiga código numérico.
+
+    Solo se usa para decidir el fallback a Groq; el texto crudo nunca se reenvía.
+    """
+    try:
+        text = str(error).lower()
+    except Exception:
+        text = ""
+    try:
+        text += " " + json.dumps(getattr(error, "details", None), default=str).lower()
+    except Exception:
+        pass
+    keywords = (
+        "quota", "rate limit", "rate_limit", "ratelimit", "resource_exhausted",
+        "too many requests", "exhausted", "usage limit", "billing",
+        "generate_content_free_tier", "free_tier",
+    )
+    return any(k in text for k in keywords)
+
+
 def gemini_error_message(error, lang="en"):
     code = _extract_status_code(error)
     if code in (401, 403):
@@ -372,35 +461,41 @@ def gemini_error_message(error, lang="en"):
     return "Could not complete the Gemini response. Check the server connection and try again."
 
 
-def deepseek_error_message(error, lang="es"):
+def groq_error_message(error, lang="es", label="Groq"):
     code = _extract_status_code(error)
     if code in (401, 403):
         if lang == "es":
             return "Autenticación fallida. Revisa la clave de API y sus permisos en el archivo .env."
-        return "DeepSeek authentication failed. Check DEEPSEEK_API_KEY and its permissions."
+        return f"{label} authentication failed. Check GROQ_API_KEY and its permissions."
     if code == 429:
         if lang == "es":
-            return "Cuota agotada o límite de uso alcanzado. Revisa tu saldo y facturación en DeepSeek."
-        return "DeepSeek quota exhausted or usage limit reached. Check your balance and billing."
+            return "Cuota agotada o límite de uso alcanzado. Revisa tu saldo y facturación en Groq."
+        return f"{label} quota exhausted or usage limit reached. Check your balance and billing."
     if code == 404:
         if lang == "es":
-            return "Modelo no disponible. El modelo configurado de DeepSeek no está disponible. Revisa DEEPSEEK_MODEL en el archivo .env."
-        return "The configured DeepSeek model is unavailable. Check DEEPSEEK_MODEL on the server."
+            return "Modelo no disponible. El modelo configurado no está disponible. Revisa GROQ_MODEL en el archivo .env."
+        return f"The configured {label} model is unavailable. Check GROQ_MODEL on the server."
     if code in (500, 502, 503, 504):
         if lang == "es":
-            return "Error temporal del servicio. DeepSeek no está disponible temporalmente. Inténtalo de nuevo más tarde."
-        return "DeepSeek is temporarily unavailable. Please try again shortly."
+            return f"Error temporal del servicio. {label} no está disponible temporalmente. Inténtalo de nuevo más tarde."
+        return f"{label} is temporarily unavailable. Please try again shortly."
     if isinstance(error, (httpx.TimeoutException, TimeoutError)):
         if lang == "es":
-            return "Error temporal del servicio. Tiempo de espera agotado al conectar con DeepSeek."
-        return "DeepSeek request timed out. Please try again."
+            return f"Error temporal del servicio. Tiempo de espera agotado al conectar con {label}."
+        return f"{label} request timed out. Please try again."
     if isinstance(error, httpx.RequestError):
         if lang == "es":
-            return "Error temporal del servicio. No se pudo conectar con DeepSeek."
-        return "Could not connect to DeepSeek. Check network connection."
+            return f"Error temporal del servicio. No se pudo conectar con {label}."
+        return f"Could not connect to {label}. Check network connection."
     if lang == "es":
-        return "No se pudo completar la respuesta de DeepSeek. Inténtalo de nuevo."
-    return "Could not complete the DeepSeek response. Check the connection and try again."
+        return f"No se pudo completar la respuesta de {label}. Inténtalo de nuevo."
+    return f"Could not complete the {label} response. Check the connection and try again."
+
+
+def deepseek_error_message(error, lang="es"):
+    # Alias legacy: mantiene compatibilidad con el proveedor secundario anterior.
+    cfg_label = "Groq" if GROQ_API_KEY else "DeepSeek"
+    return groq_error_message(error, lang, label=cfg_label)
 
 
 def missing_key_error_message(provider: str, lang: str = "es") -> str:
@@ -410,16 +505,16 @@ def missing_key_error_message(provider: str, lang: str = "es") -> str:
             if lang == "es"
             else "Missing API key. Set GEMINI_API_KEY in the server .env file before generating."
         )
-    if provider == "deepseek":
+    if provider in ("groq", "deepseek"):
         return (
-            "Clave de API ausente. Configura DEEPSEEK_API_KEY en el archivo .env."
+            "Clave de API ausente. Configura GROQ_API_KEY en el archivo .env."
             if lang == "es"
-            else "Missing API key. Set DEEPSEEK_API_KEY in the server .env file before generating."
+            else "Missing API key. Set GROQ_API_KEY in the server .env file before generating."
         )
     return (
-        "Clave de API ausente. Configura GEMINI_API_KEY o DEEPSEEK_API_KEY en el archivo .env."
+        "Clave de API ausente. Configura GEMINI_API_KEY o GROQ_API_KEY en el archivo .env."
         if lang == "es"
-        else "Missing API key. Set GEMINI_API_KEY or DEEPSEEK_API_KEY in the server .env file before generating."
+        else "Missing API key. Set GEMINI_API_KEY or GROQ_API_KEY in the server .env file before generating."
     )
 
 
@@ -428,6 +523,11 @@ class DeepSeekAPIError(Exception):
         self.status_code = status_code
         self.code = status_code
         super().__init__(message)
+
+
+# Alias para el nuevo nombre del secundario (Groq usa el mismo protocolo OpenAI).
+GroqAPIError = DeepSeekAPIError
+SecondaryAPIError = DeepSeekAPIError
 
 
 def build_openai_tools(mcp_tools):
@@ -444,7 +544,7 @@ def build_openai_tools(mcp_tools):
     return tools
 
 
-async def run_deepseek_stream(
+async def run_groq_stream(
     user_message: str,
     lang: str = "es",
     context: str | None = None,
@@ -456,14 +556,17 @@ async def run_deepseek_stream(
     images: list | None = None,
     mcp_tools: list | None = None,
 ) -> AsyncIterator[str]:
-    yield event("status", content="Conectando con DeepSeek..." if lang == "es" else "Connecting to DeepSeek...")
+    cfg = _secondary_llm_config(model_choice)
+    label = cfg["label"]
+    yield event("status", content=f"Conectando con {label}..." if lang == "es" else f"Connecting to {label}...")
 
-    api_key = DEEPSEEK_API_KEY
+    api_key = cfg["api_key"]
     if not api_key:
-        yield event("error", content=missing_key_error_message("deepseek", lang))
+        yield event("error", content=missing_key_error_message("groq", lang))
         return
 
-    model = model_choice if (model_choice and model_choice.startswith("deepseek")) else DEEPSEEK_MODEL
+    model = cfg["model"]
+    base_url = cfg["base_url"]
     allowed_tools = {tool.name for tool in (mcp_tools or [])}
     openai_tools = build_openai_tools(mcp_tools)
 
@@ -529,13 +632,13 @@ async def run_deepseek_stream(
 
                 async with http_client.stream(
                     "POST",
-                    f"{DEEPSEEK_BASE_URL}/chat/completions",
+                    f"{base_url}/chat/completions",
                     json=payload,
                     headers=headers,
                 ) as resp:
                     if resp.status_code != 200:
                         await resp.aread()
-                        raise DeepSeekAPIError(status_code=resp.status_code, message=f"DeepSeek returned {resp.status_code}")
+                        raise SecondaryAPIError(status_code=resp.status_code, message=f"{label} returned {resp.status_code}")
 
                     async for line in resp.aiter_lines():
                         if not line:
@@ -642,9 +745,9 @@ async def run_deepseek_stream(
                 if finish_reason and finish_reason not in ("stop", "length", None):
                     yield event(
                         "error",
-                        content="DeepSeek no pudo finalizar esta respuesta. Intenta con una solicitud diferente."
+                        content=f"{label} no pudo finalizar esta respuesta. Intenta con una solicitud diferente."
                         if lang == "es"
-                        else "DeepSeek could not finish this response. Try a shorter or different request.",
+                        else f"{label} could not finish this response. Try a shorter or different request.",
                     )
                     return
 
@@ -654,9 +757,9 @@ async def run_deepseek_stream(
                 else:
                     yield event(
                         "error",
-                        content="DeepSeek no devolvió texto. Intenta con una solicitud diferente."
+                        content=f"{label} no devolvió texto. Intenta con una solicitud diferente."
                         if lang == "es"
-                        else "DeepSeek returned no text. Try a different request.",
+                        else f"{label} returned no text. Try a different request.",
                     )
                     return
 
@@ -667,7 +770,11 @@ async def run_deepseek_stream(
                 else "Tool call limit reached. Please try a simpler request.",
             )
     except Exception as error:
-        yield event("error", content=deepseek_error_message(error, lang))
+        yield event("error", content=groq_error_message(error, lang, label=label))
+
+
+# Alias legacy para no romper imports existentes.
+run_deepseek_stream = run_groq_stream
 
 
 async def run_agent_stream(user_message: str, lang: str = "es", context: str | None = None,
@@ -676,8 +783,11 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
                      mode: str = "full", images: list | None = None,
                      provider: str | None = None) -> AsyncIterator[str]:
     chosen_provider = (provider or LLM_PROVIDER or "auto").strip().lower()
-    if chosen_provider not in {"gemini", "deepseek", "auto"}:
+    if chosen_provider not in {"gemini", "groq", "deepseek", "auto"}:
         chosen_provider = "auto"
+    # "deepseek" se mantiene como alias del secundario (ahora Groq).
+    if chosen_provider == "deepseek":
+        chosen_provider = "groq"
 
     mcp_tools = []
     if MCP_ENABLED:
@@ -687,8 +797,8 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
             yield event("error", content="MCP tools are unavailable. Check the MCP server or set MCP_ENABLED=false.")
             return
 
-    if chosen_provider == "deepseek":
-        async for chunk in run_deepseek_stream(
+    if chosen_provider == "groq":
+        async for chunk in run_groq_stream(
             user_message=user_message,
             lang=lang,
             context=context,
@@ -703,8 +813,26 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
             yield chunk
         return
 
-    if chosen_provider == "auto" and not GEMINI_API_KEYS and DEEPSEEK_API_KEY:
-        async for chunk in run_deepseek_stream(
+    if chosen_provider == "auto" and not GEMINI_API_KEYS and _secondary_configured():
+        async for chunk in run_groq_stream(
+            user_message=user_message,
+            lang=lang,
+            context=context,
+            dataset_text=dataset_text,
+            style_prompt=style_prompt,
+            model_choice=model_choice,
+            temperature=temperature,
+            mode=mode,
+            images=images,
+            mcp_tools=mcp_tools,
+        ):
+            yield chunk
+        return
+
+    # Si en modo auto se eligió explícitamente un modelo del secundario
+    # (ej. openai/gpt-oss-120b en el desplegable), ir directo a Groq.
+    if chosen_provider == "auto" and _is_secondary_model(model_choice) and (model_choice or "").strip() not in GEMINI_MODELS:
+        async for chunk in run_groq_stream(
             user_message=user_message,
             lang=lang,
             context=context,
@@ -842,14 +970,16 @@ async def run_agent_stream(user_message: str, lang: str = "es", context: str | N
     if gemini_failed_error is not None:
         code = _extract_status_code(gemini_failed_error)
         FALLBACK_CODES = {429, 401, 403, 500, 502, 503}
-        if chosen_provider == "auto" and code in FALLBACK_CODES and DEEPSEEK_API_KEY:
+        may_fallback = code in FALLBACK_CODES or _looks_like_quota_error(gemini_failed_error)
+        if chosen_provider == "auto" and may_fallback and _secondary_configured():
+            fallback_label = "Groq" if GROQ_API_KEY else "DeepSeek"
             yield event(
                 "status",
-                content="Gemini no disponible, cambiando a DeepSeek..."
+                content=f"Gemini no disponible, cambiando a {fallback_label}..."
                 if lang == "es"
-                else "Gemini unavailable, switching to DeepSeek...",
+                else f"Gemini unavailable, switching to {fallback_label}...",
             )
-            async for chunk in run_deepseek_stream(
+            async for chunk in run_groq_stream(
                 user_message=user_message,
                 lang=lang,
                 context=context,
@@ -874,20 +1004,22 @@ async def serve_index():
 @app.post("/api/generate")
 async def generate_interface(body: GenerateRequest):
     provider = (body.provider or LLM_PROVIDER or "auto").strip().lower()
-    if provider not in {"gemini", "deepseek", "auto"}:
+    if provider not in {"gemini", "groq", "deepseek", "auto"}:
         provider = "auto"
+    if provider == "deepseek":
+        provider = "groq"
 
     if provider == "gemini" and not GEMINI_API_KEYS:
         raise HTTPException(
             status_code=503,
             detail=missing_key_error_message("gemini", body.lang),
         )
-    if provider == "deepseek" and not DEEPSEEK_API_KEY:
+    if provider == "groq" and not _secondary_configured():
         raise HTTPException(
             status_code=503,
-            detail=missing_key_error_message("deepseek", body.lang),
+            detail=missing_key_error_message("groq", body.lang),
         )
-    if provider == "auto" and not GEMINI_API_KEYS and not DEEPSEEK_API_KEY:
+    if provider == "auto" and not GEMINI_API_KEYS and not _secondary_configured():
         raise HTTPException(
             status_code=503,
             detail=missing_key_error_message("auto", body.lang),
@@ -1125,7 +1257,10 @@ async def health():
     return {"status": "ok", "service": "GlintMesh", "version": "2.0.0",
             "llm_provider": LLM_PROVIDER,
             "gemini_configured": bool(GEMINI_API_KEYS), "model": GEMINI_MODEL, "models": GEMINI_MODELS,
+            "groq_configured": bool(GROQ_API_KEY), "groq_model": GROQ_MODEL, "groq_models": GROQ_MODELS, "groq_base_url": GROQ_BASE_URL,
             "deepseek_configured": bool(DEEPSEEK_API_KEY), "deepseek_model": DEEPSEEK_MODEL,
+            "secondary_configured": _secondary_configured(),
+            "secondary_provider": "groq" if GROQ_API_KEY else ("deepseek" if DEEPSEEK_API_KEY else None),
             "mcp_enabled": MCP_ENABLED,
             "mcp_server": "finflow-financial-tools", "protocol": "A2UI over MCP"}
 

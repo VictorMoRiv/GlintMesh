@@ -78,7 +78,8 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/generate", json={}).status_code, 422)
 
     def test_missing_key(self):
-        with patch.object(main, "GEMINI_API_KEY", ""), patch.object(main, "GEMINI_API_KEYS", []):
+        with patch.object(main, "GEMINI_API_KEY", ""), patch.object(main, "GEMINI_API_KEYS", []), \
+             patch.object(main, "GROQ_API_KEY", ""), patch.object(main, "DEEPSEEK_API_KEY", ""):
             self.assertEqual(self.client.post("/api/generate", json={"message": "Hola"}).status_code, 503)
 
     def test_real_sse_contract_without_mcp(self):

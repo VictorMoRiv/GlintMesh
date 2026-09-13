@@ -329,7 +329,16 @@ function syncSettingsUI() {
     b.style.borderColor = b.dataset.preset === stylePreset ? cv('--ok-active-bd') : '';
   });
   const sel = $('gen-model');
-  sel.innerHTML = '<option value="">default</option>' + (cachedHealth && cachedHealth.models ? cachedHealth.models.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') : '');
+  const geminiModels = (cachedHealth && cachedHealth.models) || [];
+  const groqModels = (cachedHealth && (cachedHealth.groq_models || (cachedHealth.groq_model ? [cachedHealth.groq_model] : []))) || [];
+  let optsHtml = '<option value="">default</option>';
+  if (geminiModels.length) {
+    optsHtml += '<optgroup label="Gemini">' + geminiModels.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') + '</optgroup>';
+  }
+  if (groqModels.length) {
+    optsHtml += '<optgroup label="Groq (fallback)">' + groqModels.map((m) => '<option value="' + escapeHtml(m) + '"' + (m === genModel ? ' selected' : '') + '>' + escapeHtml(m) + '</option>').join('') + '</optgroup>';
+  }
+  sel.innerHTML = optsHtml;
   if (genModel && ![...sel.options].some((o) => o.value === genModel)) {
     const opt = document.createElement('option'); opt.value = genModel; opt.textContent = genModel; opt.selected = true; sel.appendChild(opt);
   }

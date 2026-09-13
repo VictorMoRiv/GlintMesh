@@ -98,11 +98,15 @@ class DeepSeekIntegrationTests(unittest.TestCase):
         self.client = TestClient(main.app)
         self.gemini_key = "test-gemini-key-secret-12345"
         self.deepseek_key = "test-deepseek-key-secret-67890"
+        self.groq_key = "test-groq-key-secret-abcde"
 
         self.p_gemini_key = patch.object(main, "GEMINI_API_KEY", self.gemini_key)
         self.p_gemini_keys = patch.object(main, "GEMINI_API_KEYS", [self.gemini_key])
         self.p_deepseek_key = patch.object(main, "DEEPSEEK_API_KEY", self.deepseek_key)
         self.p_deepseek_model = patch.object(main, "DEEPSEEK_MODEL", "deepseek-chat")
+        # Por defecto los tests legacy aíslan Groq para no depender del .env real.
+        self.p_groq_key = patch.object(main, "GROQ_API_KEY", "")
+        self.p_groq_model = patch.object(main, "GROQ_MODEL", "openai/gpt-oss-120b")
         self.p_provider = patch.object(main, "LLM_PROVIDER", "deepseek")
         self.p_mcp = patch.object(main, "MCP_ENABLED", False)
 
@@ -110,6 +114,8 @@ class DeepSeekIntegrationTests(unittest.TestCase):
         self.p_gemini_keys.start()
         self.p_deepseek_key.start()
         self.p_deepseek_model.start()
+        self.p_groq_key.start()
+        self.p_groq_model.start()
         self.p_provider.start()
         self.p_mcp.start()
 
@@ -117,6 +123,8 @@ class DeepSeekIntegrationTests(unittest.TestCase):
         self.addCleanup(self.p_gemini_keys.stop)
         self.addCleanup(self.p_deepseek_key.stop)
         self.addCleanup(self.p_deepseek_model.stop)
+        self.addCleanup(self.p_groq_key.stop)
+        self.addCleanup(self.p_groq_model.stop)
         self.addCleanup(self.p_provider.stop)
         self.addCleanup(self.p_mcp.stop)
 
@@ -198,9 +206,9 @@ class DeepSeekIntegrationTests(unittest.TestCase):
                 self.assertEqual(res.status_code, 200)
                 events = self.parse_sse(res.text)
 
-                # Status must show fallback occurred
+                # Status must show fallback occurred (Groq es el secundario; DeepSeek queda como alias legacy)
                 status_contents = [e["content"] for e in events if e["type"] == "status"]
-                self.assertTrue(any("cambiando a DeepSeek" in s or "switching to DeepSeek" in s for s in status_contents))
+                self.assertTrue(any("cambiando a Groq" in s or "switching to Groq" in s or "cambiando a DeepSeek" in s or "switching to DeepSeek" in s for s in status_contents))
 
                 # Done must be reached via DeepSeek
                 self.assertEqual(events[-1]["type"], "done")
@@ -414,12 +422,43 @@ class DeepSeekIntegrationTests(unittest.TestCase):
             self.assertEqual(res.status_code, 503)
             self.assertIn("gemini", res.json()["detail"].lower())
 
-        # 2. Request body override to deepseek
+        # 2. Request body override to secondary (groq; deepseek aceptado como alias legacy)
         with patch.object(main, "LLM_PROVIDER", "gemini"), \
-             patch.object(main, "DEEPSEEK_API_KEY", ""):
+             patch.object(main, "DEEPSEEK_API_KEY", ""), \
+             patch.object(main, "GROQ_API_KEY", ""):
             res = self.client.post("/api/generate", json={"message": "Hola", "provider": "deepseek"})
             self.assertEqual(res.status_code, 503)
-            self.assertIn("deepseek", res.json()["detail"].lower())
+            self.assertIn("groq", res.json()["detail"].lower())
+            res2 = self.client.post("/api/generate", json={"message": "Hola", "provider": "groq"})
+            self.assertEqual(res2.status_code, 503)
+            self.assertIn("groq", res2.json()["detail"].lower())
+
+    def test_groq_is_secondary_provider(self):
+        """Groq responde como secundario con endpoint OpenAI-compatible."""
+        html_code = "```html\n<div>Groq Financial Dashboard</div>\n```"
+        lines = [
+            make_text_chunk("Generando interfaz... "),
+            make_text_chunk(html_code, finish_reason="stop"),
+            "data: [DONE]",
+        ]
+        fake_client = FakeAsyncClient([FakeStreamResponse(lines, status_code=200)])
+
+        with patch.object(main, "GROQ_API_KEY", self.groq_key), \
+             patch.object(main, "GROQ_MODEL", "openai/gpt-oss-120b"), \
+             patch.object(main, "GROQ_BASE_URL", "https://api.groq.com/openai/v1"), \
+             patch.object(main, "LLM_PROVIDER", "groq"), \
+             patch("httpx.AsyncClient", return_value=fake_client):
+            res = self.client.post("/api/generate", json={"message": "Crea un dashboard", "lang": "es", "provider": "groq"})
+
+        self.assertEqual(res.status_code, 200)
+        events = self.parse_sse(res.text)
+        self.assertEqual(events[-1]["type"], "done")
+        full_text = "".join(e["content"] for e in events if e["type"] == "text_chunk")
+        self.assertIn("Groq Financial Dashboard", full_text)
+        call = fake_client.calls[0]
+        self.assertEqual(call["url"], "https://api.groq.com/openai/v1/chat/completions")
+        self.assertEqual(call["headers"]["Authorization"], f"Bearer {self.groq_key}")
+        self.assertEqual(call["json"]["model"], "openai/gpt-oss-120b")
 
 
 if __name__ == "__main__":
